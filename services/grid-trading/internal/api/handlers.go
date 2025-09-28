@@ -21,6 +21,12 @@ func NewHandlers(gridService *service.GridService) *Handlers {
 }
 
 func (h *Handlers) RegisterRoutes(r *mux.Router) {
+	// Grid management endpoints
+	r.HandleFunc("/grids", h.handleCreateGrid).Methods("POST")
+	r.HandleFunc("/grids", h.handleGetAllGrids).Methods("GET")
+	r.HandleFunc("/grids/{symbol}", h.handleGetGrids).Methods("GET")
+
+	// Webhook endpoints
 	r.HandleFunc("/trigger-for-price", h.handlePriceTrigger).Methods("POST")
 	r.HandleFunc("/order-fill-notification", h.handleFillNotification).Methods("POST")
 	r.HandleFunc("/order-fill-error-notification", h.handleErrorNotification).Methods("POST")
@@ -47,6 +53,14 @@ type ErrorNotificationRequest struct {
 	Symbol  string `json:"symbol"`
 	Side    string `json:"side"`
 	Error   string `json:"error"`
+}
+
+type CreateGridRequest struct {
+	Symbol   string          `json:"symbol"`
+	MinPrice decimal.Decimal `json:"min_price"`
+	MaxPrice decimal.Decimal `json:"max_price"`
+	GridStep decimal.Decimal `json:"grid_step"`
+	BuyAmount decimal.Decimal `json:"buy_amount"`
 }
 
 func (h *Handlers) handlePriceTrigger(w http.ResponseWriter, r *http.Request) {
@@ -126,4 +140,79 @@ func (h *Handlers) handleErrorNotification(w http.ResponseWriter, r *http.Reques
 func (h *Handlers) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+}
+
+func (h *Handlers) handleCreateGrid(w http.ResponseWriter, r *http.Request) {
+	var req CreateGridRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate input
+	if req.Symbol == "" {
+		http.Error(w, "Symbol is required", http.StatusBadRequest)
+		return
+	}
+	if req.MinPrice.LessThanOrEqual(decimal.Zero) || req.MaxPrice.LessThanOrEqual(decimal.Zero) {
+		http.Error(w, "Min and max prices must be positive", http.StatusBadRequest)
+		return
+	}
+	if req.MinPrice.GreaterThanOrEqual(req.MaxPrice) {
+		http.Error(w, "Min price must be less than max price", http.StatusBadRequest)
+		return
+	}
+	if req.GridStep.LessThanOrEqual(decimal.Zero) {
+		http.Error(w, "Grid step must be positive", http.StatusBadRequest)
+		return
+	}
+	if req.BuyAmount.LessThanOrEqual(decimal.Zero) {
+		http.Error(w, "Buy amount must be positive", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("Creating grid for %s: min=%s, max=%s, step=%s, amount=%s",
+		req.Symbol, req.MinPrice, req.MaxPrice, req.GridStep, req.BuyAmount)
+
+	_, err := h.gridService.CreateGrid(req.Symbol, req.MinPrice, req.MaxPrice, req.GridStep, req.BuyAmount)
+	if err != nil {
+		log.Printf("Error creating grid: %v", err)
+		http.Error(w, "Failed to create grid", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handlers) handleGetGrids(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	symbol := vars["symbol"]
+
+	log.Printf("Fetching grid levels for symbol: %s", symbol)
+
+	levels, err := h.gridService.GetGridLevels(symbol)
+	if err != nil {
+		log.Printf("Error fetching grid levels: %v", err)
+		http.Error(w, "Failed to fetch grid levels", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(levels)
+}
+
+func (h *Handlers) handleGetAllGrids(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Fetching all grid levels")
+
+	levels, err := h.gridService.GetAllGridLevels()
+	if err != nil {
+		log.Printf("Error fetching all grid levels: %v", err)
+		http.Error(w, "Failed to fetch grid levels", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(levels)
 }

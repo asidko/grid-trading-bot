@@ -391,3 +391,32 @@ func (r *GridLevelRepository) Create(level *models.GridLevel) error {
 
 	return err
 }
+
+// GetAll retrieves all grid levels
+func (r *GridLevelRepository) GetAll() ([]*models.GridLevel, error) {
+	query := `
+		SELECT id, symbol, buy_price, sell_price, buy_amount, filled_amount,
+		       state, buy_order_id, sell_order_id, enabled, error_msg,
+		       state_changed_at, created_at, updated_at
+		FROM grid_levels
+		ORDER BY symbol, buy_price ASC
+	`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var levels []*models.GridLevel
+	for rows.Next() {
+		level, err := r.scanLevel(rows)
+		if err != nil {
+			return nil, err
+		}
+		levels = append(levels, level)
+	}
+
+	return levels, rows.Err()
+}
+

@@ -321,3 +321,83 @@ func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID
 		}
 	}
 }
+
+// CreateGrid creates new grid levels for a symbol, only adding missing levels (idempotent)
+func (s *GridService) CreateGrid(symbol string, minPrice, maxPrice, gridStep, buyAmount decimal.Decimal) ([]*models.GridLevel, error) {
+	// Calculate the number of levels
+	priceRange := maxPrice.Sub(minPrice)
+	numLevels := priceRange.Div(gridStep).IntPart()
+
+	if numLevels <= 0 {
+		return nil, fmt.Errorf("invalid grid parameters: no levels can be created")
+	}
+
+	// Get existing levels to check what already exists
+	existingLevels, err := s.repo.GetBySymbol(symbol)
+	if err != nil {
+		log.Printf("Warning: failed to get existing levels for %s: %v", symbol, err)
+	}
+
+	// Create a map for quick lookup of existing levels
+	existingMap := make(map[string]bool)
+	for _, level := range existingLevels {
+		key := fmt.Sprintf("%s-%s", level.BuyPrice.String(), level.SellPrice.String())
+		existingMap[key] = true
+	}
+
+	// Create new levels
+	levels := make([]*models.GridLevel, 0, int(numLevels))
+	skippedCount := 0
+	createdCount := 0
+
+	for i := int64(0); i < numLevels; i++ {
+		buyPrice := minPrice.Add(gridStep.Mul(decimal.NewFromInt(i)))
+		sellPrice := buyPrice.Add(gridStep)
+
+		// Skip if sell price exceeds max price
+		if sellPrice.GreaterThan(maxPrice) {
+			break
+		}
+
+		// Check if this level already exists
+		key := fmt.Sprintf("%s-%s", buyPrice.String(), sellPrice.String())
+		if existingMap[key] {
+			skippedCount++
+			continue
+		}
+
+		level := &models.GridLevel{
+			Symbol:    symbol,
+			BuyPrice:  buyPrice,
+			SellPrice: sellPrice,
+			BuyAmount: buyAmount,
+			State:     models.StateReady,
+			Enabled:   true,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+
+		// Insert the level
+		if err := s.repo.Create(level); err != nil {
+			// If it's a unique constraint violation, skip this level
+			log.Printf("Failed to create level at buy=%s sell=%s: %v", buyPrice, sellPrice, err)
+			continue
+		}
+
+		createdCount++
+		levels = append(levels, level)
+	}
+
+	log.Printf("Grid creation for %s: created %d new levels, skipped %d existing levels", symbol, createdCount, skippedCount)
+	return levels, nil
+}
+
+// GetGridLevels retrieves all grid levels for a specific symbol
+func (s *GridService) GetGridLevels(symbol string) ([]*models.GridLevel, error) {
+	return s.repo.GetBySymbol(symbol)
+}
+
+// GetAllGridLevels retrieves all grid levels
+func (s *GridService) GetAllGridLevels() ([]*models.GridLevel, error) {
+	return s.repo.GetAll()
+}
