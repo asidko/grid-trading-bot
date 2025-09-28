@@ -50,17 +50,3 @@ func (g *GridLevel) CanPlaceSell(currentPrice decimal.Decimal) bool {
 		g.FilledAmount.Decimal.GreaterThan(decimal.Zero)
 }
 
-func (g *GridLevel) IsInPlacingState() bool {
-	return g.State == StatePlacingBuy || g.State == StatePlacingSell
-}
-
-func (g *GridLevel) IsInActiveState() bool {
-	return g.State == StateBuyActive || g.State == StateSellActive
-}
-
-func (g *GridLevel) NeedsRecovery(timeout time.Duration) bool {
-	if !g.IsInPlacingState() {
-		return false
-	}
-	return time.Since(g.StateChangedAt) > timeout
-}

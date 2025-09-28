@@ -33,3 +33,4 @@ vendor/
 
 # Docker volumes
 postgres_data/
+/bin/

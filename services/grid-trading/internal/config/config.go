@@ -19,43 +19,37 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	cfg := &Config{
+	port := 5432
+	if p := os.Getenv("DB_PORT"); p != "" {
+		if v, _ := strconv.Atoi(p); v > 0 {
+			port = v
+		}
+	}
+
+	syncEnabled := true
+	if s := os.Getenv("SYNC_JOB_ENABLED"); s != "" {
+		if v, _ := strconv.ParseBool(s); !v {
+			syncEnabled = false
+		}
+	}
+
+	return &Config{
 		ServerPort:        getEnv("SERVER_PORT", "8080"),
 		DBHost:            getEnv("DB_HOST", "localhost"),
-		DBPort:            getEnvAsInt("DB_PORT", 5432),
+		DBPort:            port,
 		DBUser:            getEnv("DB_USER", "postgres"),
 		DBPassword:        getEnv("DB_PASSWORD", "postgres"),
 		DBName:            getEnv("DB_NAME", "grid_trading"),
 		DBSSLMode:         getEnv("DB_SSL_MODE", "disable"),
 		OrderAssuranceURL: getEnv("ORDER_ASSURANCE_URL", "http://localhost:9090"),
-		SyncJobEnabled:    getEnvAsBool("SYNC_JOB_ENABLED", true),
+		SyncJobEnabled:    syncEnabled,
 		SyncJobCron:       getEnv("SYNC_JOB_CRON", "0 * * * *"),
 	}
-
-	return cfg
 }
 
 func getEnv(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
+	if value := os.Getenv(key); value != "" {
 		return value
-	}
-	return defaultValue
-}
-
-func getEnvAsInt(key string, defaultValue int) int {
-	if value, exists := os.LookupEnv(key); exists {
-		if intVal, err := strconv.Atoi(value); err == nil {
-			return intVal
-		}
-	}
-	return defaultValue
-}
-
-func getEnvAsBool(key string, defaultValue bool) bool {
-	if value, exists := os.LookupEnv(key); exists {
-		if boolVal, err := strconv.ParseBool(value); err == nil {
-			return boolVal
-		}
 	}
 	return defaultValue
 }

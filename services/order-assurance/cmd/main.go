@@ -1,0 +1,109 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gorilla/mux"
+	"github.com/grid-trading-bot/services/order-assurance/internal/api"
+	"github.com/grid-trading-bot/services/order-assurance/internal/config"
+	"github.com/grid-trading-bot/services/order-assurance/internal/exchange"
+	"github.com/grid-trading-bot/services/order-assurance/internal/service"
+	"github.com/grid-trading-bot/services/order-assurance/internal/webhook"
+	"github.com/joho/godotenv"
+)
+
+func main() {
+	// Load .env file if exists
+	if err := godotenv.Load(); err != nil {
+		log.Printf("No .env file found: %v", err)
+	}
+
+	// Load configuration
+	cfg := config.LoadConfig()
+
+	// Validate required config
+	if cfg.BinanceAPIKey == "" || cfg.BinanceSecret == "" {
+		log.Fatal("BINANCE_API_KEY and BINANCE_API_SECRET are required")
+	}
+
+	// Create Binance client
+	binanceClient := exchange.NewBinanceClient(
+		cfg.BinanceAPIKey,
+		cfg.BinanceSecret,
+		cfg.BinanceTestnet,
+	)
+
+	// Create webhook notifier
+	webhookNotifier := webhook.NewNotifier(cfg.GridTradingURL)
+
+	// Create order service
+	orderService := service.NewOrderService(binanceClient, webhookNotifier)
+
+	// Create API handlers
+	handlers := api.NewHandlers(orderService)
+
+	// Setup routes
+	router := mux.NewRouter()
+	handlers.RegisterRoutes(router)
+
+	// Add logging middleware
+	router.Use(loggingMiddleware)
+
+	// Create HTTP server
+	srv := &http.Server{
+		Addr:    ":" + cfg.ServerPort,
+		Handler: router,
+	}
+
+
+	// Start server
+	go func() {
+		log.Printf("Order Assurance Service starting on port %s", cfg.ServerPort)
+		if cfg.BinanceTestnet {
+			log.Println("Using Binance Testnet API")
+		} else {
+			log.Println("Using Binance Production API")
+		}
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Server failed:", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server...")
+
+	// Shutdown server
+	if err := srv.Close(); err != nil {
+		log.Printf("Server close error: %v", err)
+	}
+
+	fmt.Println("Server stopped")
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Call the next handler
+		next.ServeHTTP(w, r)
+
+		// Log the request
+		log.Printf(
+			"%s %s %s",
+			r.Method,
+			r.RequestURI,
+			time.Since(start),
+		)
+	})
+}

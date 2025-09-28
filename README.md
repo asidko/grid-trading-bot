@@ -1,14 +1,24 @@
 # Grid Trading Bot
 
-A multi-service Golang application implementing a grid trading strategy for cryptocurrency markets.
+A multi-service Golang application implementing a grid trading strategy for cryptocurrency markets using Binance Spot API.
 
 ## Architecture
 
-The bot implements a reactive grid trading strategy that:
+The system consists of two microservices:
+
+### 1. Grid Trading Service
+Manages grid levels and trading logic:
 - Places buy orders when price drops to predefined levels
 - Places sell orders when price rises after a buy fill
 - Operates independently across multiple price levels
 - Handles crash recovery and missed notifications
+
+### 2. Order Assurance Service
+Interfaces with Binance Spot API:
+- Places idempotent limit orders on Binance
+- Monitors orders for fills
+- Sends webhook notifications back to grid-trading service
+- Uses Binance as the source of truth (no local database)
 
 ## Quick Start
 
@@ -20,16 +30,25 @@ The bot implements a reactive grid trading strategy that:
 2. **Configure Environment**
    ```bash
    cp .env.example .env
-   # Edit .env with your configuration
+   # Edit .env with your Binance API credentials
    ```
 
-3. **Build and Run**
+3. **Build Services**
    ```bash
-   make build
-   make run
+   make build-all
    ```
 
-4. **Initialize Grid Levels**
+4. **Run Services**
+   ```bash
+   # Run both services
+   make run-all
+
+   # Or run individually:
+   make run-assurance  # Start order-assurance first
+   make run-grid       # Then start grid-trading
+   ```
+
+5. **Initialize Grid Levels**
    ```bash
    # Example: ETH grid from $2000-$4000 with $200 steps
    make init-grid SYMBOL=ETH MIN=2000 MAX=4000 STEP=200 AMOUNT=1000
