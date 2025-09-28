@@ -36,7 +36,6 @@ func main() {
 	binanceClient := exchange.NewBinanceClient(
 		cfg.BinanceAPIKey,
 		cfg.BinanceSecret,
-		cfg.BinanceTestnet,
 	)
 
 	// Create webhook notifier
@@ -65,11 +64,7 @@ func main() {
 	// Start server
 	go func() {
 		log.Printf("Order Assurance Service starting on port %s", cfg.ServerPort)
-		if cfg.BinanceTestnet {
-			log.Println("Using Binance Testnet API")
-		} else {
-			log.Println("Using Binance Production API")
-		}
+		log.Println("Using Binance Production API")
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("Server failed:", err)

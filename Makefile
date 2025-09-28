@@ -19,7 +19,10 @@ build:
 build-assurance:
 	go build -o bin/order-assurance services/order-assurance/cmd/main.go
 
-build-all: build build-assurance
+build-monitor:
+	go build -o bin/price-monitor services/price-monitor/cmd/main.go
+
+build-all: build build-assurance build-monitor
 
 run-grid:
 	go run services/grid-trading/cmd/main.go
@@ -27,11 +30,16 @@ run-grid:
 run-assurance:
 	SERVER_PORT=9090 go run services/order-assurance/cmd/main.go
 
+run-monitor:
+	MONITOR_PORT=7070 go run services/price-monitor/cmd/main.go
+
 run-all:
-	@echo "Starting both services..."
+	@echo "Starting all services..."
 	@make run-assurance &
 	@sleep 2
-	@make run-grid
+	@make run-grid &
+	@sleep 2
+	@make run-monitor
 
 test:
 	go test ./...
@@ -44,6 +52,12 @@ docker-up:
 
 docker-down:
 	docker-compose down
+
+docker-build:
+	docker-compose build
+
+docker-logs:
+	docker-compose logs -f
 
 init-grid:
 	@echo "Example: make init-grid SYMBOL=ETH MIN=2000 MAX=4000 STEP=200 AMOUNT=1000"

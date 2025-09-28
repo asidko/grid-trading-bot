@@ -4,54 +4,91 @@ A multi-service Golang application implementing a grid trading strategy for cryp
 
 ## Architecture
 
-The system consists of two microservices:
+The system consists of three microservices:
 
-### 1. Grid Trading Service
+### 1. Grid Trading Service (Port 8080)
 Manages grid levels and trading logic:
 - Places buy orders when price drops to predefined levels
 - Places sell orders when price rises after a buy fill
 - Operates independently across multiple price levels
 - Handles crash recovery and missed notifications
 
-### 2. Order Assurance Service
+### 2. Order Assurance Service (Port 9090)
 Interfaces with Binance Spot API:
 - Places idempotent limit orders on Binance
-- Monitors orders for fills
+- Enforces symbol trading restrictions (min quantity, tick size)
 - Sends webhook notifications back to grid-trading service
 - Uses Binance as the source of truth (no local database)
 
-## Quick Start
+### 3. Price Monitor Service (Port 7070)
+Real-time price monitoring:
+- Connects to Binance WebSocket for live price feeds
+- Triggers grid-trading service on price changes
+- Auto-reconnects with exponential backoff
+- Configurable price change thresholds
 
-1. **Setup Database**
-   ```bash
-   make docker-up
-   ```
+## Quick Start with Docker Compose
 
-2. **Configure Environment**
+1. **Configure Environment**
    ```bash
    cp .env.example .env
    # Edit .env with your Binance API credentials
    ```
 
-3. **Build Services**
+2. **Start All Services**
    ```bash
-   make build-all
+   docker-compose up -d
    ```
 
-4. **Run Services**
-   ```bash
-   # Run both services
-   make run-all
+   > **Note:** Services use host network mode, so they'll be accessible on localhost:
+   > - Grid Trading: http://localhost:8080
+   > - Order Assurance: http://localhost:9090
+   > - Price Monitor: http://localhost:7070
+   > - PostgreSQL: localhost:5432
 
-   # Or run individually:
-   make run-assurance  # Start order-assurance first
-   make run-grid       # Then start grid-trading
+3. **Check Health**
+   ```bash
+   ./scripts/health-check.sh
+   ```
+
+4. **View Logs**
+   ```bash
+   docker-compose logs -f
    ```
 
 5. **Initialize Grid Levels**
    ```bash
-   # Example: ETH grid from $2000-$4000 with $200 steps
-   make init-grid SYMBOL=ETH MIN=2000 MAX=4000 STEP=200 AMOUNT=1000
+   # Example: ETH grid from $3000-$4000 with $100 steps
+   make init-grid SYMBOL=ETH MIN=3000 MAX=4000 STEP=100 AMOUNT=1000
+   ```
+
+6. **Stop Services**
+   ```bash
+   docker-compose down
+   ```
+
+## Local Development
+
+1. **Start PostgreSQL**
+   ```bash
+   docker-compose up -d postgres
+   ```
+
+2. **Configure Environment**
+   ```bash
+   cp .env.example .env
+   # Edit .env - use DB_HOST=localhost for local dev
+   ```
+
+3. **Run Services**
+   ```bash
+   # Run all services locally
+   make run-all
+
+   # Or run individually:
+   make run-assurance  # Order assurance service
+   make run-grid       # Grid trading service
+   make run-monitor    # Price monitor service
    ```
 
 ## API Endpoints

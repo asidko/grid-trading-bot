@@ -2,37 +2,40 @@ package config
 
 import (
 	"os"
-	"strconv"
 )
 
 type Config struct {
 	ServerPort     string
 	BinanceAPIKey  string
 	BinanceSecret  string
-	BinanceTestnet bool
 	GridTradingURL string
 }
 
 func LoadConfig() *Config {
-	testnet := false
-	if t := os.Getenv("BINANCE_TESTNET"); t != "" {
-		if v, _ := strconv.ParseBool(t); v {
-			testnet = true
-		}
+	serverPort := os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		serverPort = "9090" // Only default kept for local dev
+	}
+
+	apiKey := os.Getenv("BINANCE_API_KEY")
+	if apiKey == "" {
+		apiKey = "" // Will fail when trying to place orders
+	}
+
+	apiSecret := os.Getenv("BINANCE_API_SECRET")
+	if apiSecret == "" {
+		apiSecret = "" // Will fail when trying to place orders
+	}
+
+	gridTradingURL := os.Getenv("GRID_TRADING_URL")
+	if gridTradingURL == "" {
+		gridTradingURL = "http://localhost:8080" // Only default kept for local dev
 	}
 
 	return &Config{
-		ServerPort:     getEnv("SERVER_PORT", "9090"),
-		BinanceAPIKey:  getEnv("BINANCE_API_KEY", ""),
-		BinanceSecret:  getEnv("BINANCE_API_SECRET", ""),
-		BinanceTestnet: testnet,
-		GridTradingURL: getEnv("GRID_TRADING_URL", "http://localhost:8080"),
+		ServerPort:     serverPort,
+		BinanceAPIKey:  apiKey,
+		BinanceSecret:  apiSecret,
+		GridTradingURL: gridTradingURL,
 	}
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

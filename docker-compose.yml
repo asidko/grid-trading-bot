@@ -1,22 +1,76 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: grid-trading-db
+    network_mode: host
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: grid_trading
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+      PGPORT: ${DB_PORT}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./services/grid-trading/migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -p ${DB_PORT}"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Grid Trading Service
+  grid-trading:
+    build:
+      context: .
+      dockerfile: services/grid-trading/Dockerfile
+    container_name: grid-trading-service
+    network_mode: host
+    environment:
+      SERVER_PORT: ${GRID_PORT}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      DB_SSL_MODE: disable
+      ORDER_ASSURANCE_URL: ${ORDER_ASSURANCE_URL}
+      SYNC_JOB_ENABLED: ${SYNC_JOB_ENABLED}
+      SYNC_JOB_CRON: ${SYNC_JOB_CRON}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      order-assurance:
+        condition: service_started
+
+  # Order Assurance Service
+  order-assurance:
+    build:
+      context: .
+      dockerfile: services/order-assurance/Dockerfile
+    container_name: order-assurance-service
+    network_mode: host
+    environment:
+      SERVER_PORT: ${ASSURANCE_PORT}
+      BINANCE_API_KEY: ${BINANCE_API_KEY}
+      BINANCE_API_SECRET: ${BINANCE_API_SECRET}
+      GRID_TRADING_URL: ${GRID_TRADING_URL}
+
+  # Price Monitor Service
+  price-monitor:
+    build:
+      context: .
+      dockerfile: services/price-monitor/Dockerfile
+    container_name: price-monitor-service
+    network_mode: host
+    environment:
+      SERVER_PORT: ${MONITOR_PORT}
+      GRID_TRADING_URL: ${GRID_TRADING_URL}
+      MONITORED_SYMBOLS: ${MONITORED_SYMBOLS}
+      TRIGGER_INTERVAL_MS: ${TRIGGER_INTERVAL_MS}
+    depends_on:
+      - grid-trading
 
 volumes:
   postgres_data:

@@ -19,37 +19,68 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	port := 5432
-	if p := os.Getenv("DB_PORT"); p != "" {
-		if v, _ := strconv.Atoi(p); v > 0 {
-			port = v
-		}
+	// Required variables
+	serverPort := os.Getenv("SERVER_PORT")
+	if serverPort == "" {
+		serverPort = "8080" // Only default kept for local dev
 	}
 
-	syncEnabled := true
-	if s := os.Getenv("SYNC_JOB_ENABLED"); s != "" {
-		if v, _ := strconv.ParseBool(s); !v {
-			syncEnabled = false
-		}
+	dbHost := os.Getenv("DB_HOST")
+	if dbHost == "" {
+		dbHost = "localhost" // Only default kept for local dev
+	}
+
+	dbPortStr := os.Getenv("DB_PORT")
+	if dbPortStr == "" {
+		dbPortStr = "5432" // Only default kept for local dev
+	}
+	dbPort, err := strconv.Atoi(dbPortStr)
+	if err != nil {
+		dbPort = 5432
+	}
+
+	dbUser := os.Getenv("DB_USER")
+	if dbUser == "" {
+		dbUser = "postgres" // Only default kept for local dev
+	}
+
+	dbPassword := os.Getenv("DB_PASSWORD")
+	if dbPassword == "" {
+		dbPassword = "postgres" // Only default kept for local dev
+	}
+
+	dbName := os.Getenv("DB_NAME")
+	if dbName == "" {
+		dbName = "grid_trading" // Only default kept for local dev
+	}
+
+	dbSSLMode := os.Getenv("DB_SSL_MODE")
+	if dbSSLMode == "" {
+		dbSSLMode = "disable" // Only default kept for local dev
+	}
+
+	orderAssuranceURL := os.Getenv("ORDER_ASSURANCE_URL")
+	if orderAssuranceURL == "" {
+		orderAssuranceURL = "http://localhost:9090" // Only default kept for local dev
+	}
+
+	syncEnabled, _ := strconv.ParseBool(os.Getenv("SYNC_JOB_ENABLED"))
+
+	syncCron := os.Getenv("SYNC_JOB_CRON")
+	if syncCron == "" {
+		syncCron = "0 * * * *" // Hourly default
 	}
 
 	return &Config{
-		ServerPort:        getEnv("SERVER_PORT", "8080"),
-		DBHost:            getEnv("DB_HOST", "localhost"),
-		DBPort:            port,
-		DBUser:            getEnv("DB_USER", "postgres"),
-		DBPassword:        getEnv("DB_PASSWORD", "postgres"),
-		DBName:            getEnv("DB_NAME", "grid_trading"),
-		DBSSLMode:         getEnv("DB_SSL_MODE", "disable"),
-		OrderAssuranceURL: getEnv("ORDER_ASSURANCE_URL", "http://localhost:9090"),
+		ServerPort:        serverPort,
+		DBHost:            dbHost,
+		DBPort:            dbPort,
+		DBUser:            dbUser,
+		DBPassword:        dbPassword,
+		DBName:            dbName,
+		DBSSLMode:         dbSSLMode,
+		OrderAssuranceURL: orderAssuranceURL,
 		SyncJobEnabled:    syncEnabled,
-		SyncJobCron:       getEnv("SYNC_JOB_CRON", "0 * * * *"),
+		SyncJobCron:       syncCron,
 	}
-}
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

@@ -20,7 +20,6 @@ import (
 
 const (
 	BinanceAPIURL = "https://api.binance.com"
-	BinanceTestnetURL = "https://testnet.binance.vision"
 )
 
 // SymbolInfo contains trading rules for a symbol
@@ -52,16 +51,11 @@ type BinanceClient struct {
 	symbolInfoTime  time.Time
 }
 
-func NewBinanceClient(apiKey, apiSecret string, testnet bool) *BinanceClient {
-	baseURL := BinanceAPIURL
-	if testnet {
-		baseURL = BinanceTestnetURL
-	}
-
+func NewBinanceClient(apiKey, apiSecret string) *BinanceClient {
 	return &BinanceClient{
 		apiKey:    apiKey,
 		apiSecret: apiSecret,
-		baseURL:   baseURL,
+		baseURL:   BinanceAPIURL,
 		client:    &http.Client{Timeout: 10 * time.Second},
 		orderCache: make(map[string]*models.BinanceOrder),
 		cacheExpiry: 5 * time.Second, // Short cache for idempotency
