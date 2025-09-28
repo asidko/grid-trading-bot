@@ -7,20 +7,65 @@ import (
 
 	"github.com/grid-trading-bot/services/grid-trading/internal/client"
 	"github.com/grid-trading-bot/services/grid-trading/internal/models"
-	"github.com/grid-trading-bot/services/grid-trading/internal/repository"
 	"github.com/shopspring/decimal"
 )
 
-type GridService struct {
-	repo      *repository.GridLevelRepository
-	assurance *client.OrderAssuranceClient
+// GridLevelRepositoryInterface defines the interface for grid level repository operations
+// Only includes methods actually used by GridService (Interface Segregation Principle)
+type GridLevelRepositoryInterface interface {
+	// Query operations
+	GetAll() ([]*models.GridLevel, error)
+	GetBySymbol(symbol string) ([]*models.GridLevel, error)
+	GetByBuyOrderID(orderID string) (*models.GridLevel, error)
+	GetBySellOrderID(orderID string) (*models.GridLevel, error)
+	GetStuckInPlacingState(timeout time.Duration) ([]*models.GridLevel, error)
+	GetAllActive() ([]*models.GridLevel, error)
+
+	// State management operations
+	TryStartBuyOrder(id int) (bool, error)
+	TryStartSellOrder(id int) (bool, error)
+	UpdateState(id int, state models.GridState, errorMsg *string) error
+
+	// Order tracking operations
+	UpdateBuyOrderPlaced(id int, orderID string) error
+	UpdateSellOrderPlaced(id int, orderID string) error
+
+	// Fill processing operations
+	ProcessBuyFill(id int, filledAmount decimal.Decimal) error
+	ProcessSellFill(id int) error
+
+	// Creation operations
+	Create(level *models.GridLevel) error
 }
 
-func NewGridService(repo *repository.GridLevelRepository, assurance *client.OrderAssuranceClient) *GridService {
+// OrderAssuranceInterface defines the interface for order assurance client operations
+type OrderAssuranceInterface interface {
+	PlaceOrder(req client.OrderRequest) (*client.OrderResponse, error)
+	GetOrderStatus(orderID string) (*client.OrderStatus, error)
+}
+
+type GridService struct {
+	repo      GridLevelRepositoryInterface
+	assurance OrderAssuranceInterface
+}
+
+// NewGridService creates a new GridService
+// Accepts both concrete types and interfaces (Go's interface satisfaction is implicit)
+func NewGridService(repo GridLevelRepositoryInterface, assurance OrderAssuranceInterface) *GridService {
 	return &GridService{
 		repo:      repo,
 		assurance: assurance,
 	}
+}
+
+// CheckHealth verifies database connectivity
+func (s *GridService) CheckHealth() error {
+	// Try to query the database with a simple count
+	_, err := s.repo.GetAll()
+	if err != nil {
+		return fmt.Errorf("database health check failed: %w", err)
+	}
+	return nil
 }
 
 func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) error {
@@ -29,16 +74,27 @@ func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) 
 		return fmt.Errorf("failed to get levels for symbol %s: %w", symbol, err)
 	}
 
+	activatedCount := 0
 	for _, level := range levels {
 		if level.CanPlaceBuy(price) {
+			log.Printf("INFO: Price %s triggered BUY level %d (target: %s)", price, level.ID, level.BuyPrice)
 			if err := s.tryPlaceBuyOrder(level); err != nil {
-				log.Printf("Failed to place buy order for level %d: %v", level.ID, err)
+				log.Printf("ERROR: Failed to place buy order for level %d: %v", level.ID, err)
+			} else {
+				activatedCount++
 			}
 		} else if level.CanPlaceSell(price) {
+			log.Printf("INFO: Price %s triggered SELL level %d (target: %s)", price, level.ID, level.SellPrice)
 			if err := s.tryPlaceSellOrder(level); err != nil {
-				log.Printf("Failed to place sell order for level %d: %v", level.ID, err)
+				log.Printf("ERROR: Failed to place sell order for level %d: %v", level.ID, err)
+			} else {
+				activatedCount++
 			}
 		}
+	}
+
+	if activatedCount > 0 {
+		log.Printf("INFO: Successfully activated %d orders for %s", activatedCount, symbol)
 	}
 
 	return nil
@@ -61,18 +117,23 @@ func (s *GridService) tryPlaceBuyOrder(level *models.GridLevel) error {
 		Amount: level.BuyAmount,
 	}
 
+	log.Printf("INFO: Placing buy order for level %d - Symbol: %s, Price: %s, Amount: %s",
+		level.ID, orderReq.Symbol, orderReq.Price, orderReq.Amount)
+
 	orderResp, err := s.assurance.PlaceOrder(orderReq)
 	if err != nil {
-		errMsg := err.Error()
+		log.Printf("ERROR: Buy order placement failed for level %d: %v", level.ID, err)
+		errMsg := fmt.Sprintf("BUY order failed at %s: %v", level.BuyPrice, err)
 		s.repo.UpdateState(level.ID, models.StateReady, &errMsg)
 		return fmt.Errorf("failed to place buy order: %w", err)
 	}
 
 	if err := s.repo.UpdateBuyOrderPlaced(level.ID, orderResp.OrderID); err != nil {
+		log.Printf("ERROR: Failed to update database for buy order %s: %v", orderResp.OrderID, err)
 		return fmt.Errorf("failed to update buy order placed: %w", err)
 	}
 
-	log.Printf("Placed buy order %s for level %d at price %s", orderResp.OrderID, level.ID, level.BuyPrice)
+	log.Printf("SUCCESS: Placed buy order %s for level %d at price %s, amount %s", orderResp.OrderID, level.ID, level.BuyPrice, level.BuyAmount)
 	return nil
 }
 
@@ -98,9 +159,13 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 		Amount: level.FilledAmount.Decimal,
 	}
 
+	log.Printf("INFO: Placing sell order for level %d - Symbol: %s, Price: %s, Amount: %s",
+		level.ID, orderReq.Symbol, orderReq.Price, orderReq.Amount)
+
 	orderResp, err := s.assurance.PlaceOrder(orderReq)
 	if err != nil {
-		errMsg := err.Error()
+		log.Printf("ERROR: Sell order placement failed for level %d: %v", level.ID, err)
+		errMsg := fmt.Sprintf("SELL order failed at %s: %v", level.SellPrice, err)
 		s.repo.UpdateState(level.ID, models.StateHolding, &errMsg)
 		return fmt.Errorf("failed to place sell order: %w", err)
 	}

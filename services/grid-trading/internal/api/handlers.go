@@ -138,6 +138,16 @@ func (h *Handlers) handleErrorNotification(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *Handlers) handleHealth(w http.ResponseWriter, r *http.Request) {
+	// Check database connectivity
+	if err := h.gridService.CheckHealth(); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"status": "unhealthy",
+			"error":  err.Error(),
+		})
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }

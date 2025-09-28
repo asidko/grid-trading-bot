@@ -7,19 +7,19 @@ import (
 
 	"github.com/grid-trading-bot/services/order-assurance/internal/exchange"
 	"github.com/grid-trading-bot/services/order-assurance/internal/models"
-	"github.com/grid-trading-bot/services/order-assurance/internal/webhook"
+	"github.com/grid-trading-bot/services/order-assurance/internal/client"
 	"github.com/shopspring/decimal"
 )
 
 type OrderService struct {
-	binance         *exchange.BinanceClient
-	webhookNotifier *webhook.Notifier
+	binance    *exchange.BinanceClient
+	gridClient *client.Notifier
 }
 
-func NewOrderService(binance *exchange.BinanceClient, webhookNotifier *webhook.Notifier) *OrderService {
+func NewOrderService(binance *exchange.BinanceClient, gridClient *client.Notifier) *OrderService {
 	return &OrderService{
-		binance:         binance,
-		webhookNotifier: webhookNotifier,
+		binance:    binance,
+		gridClient: gridClient,
 	}
 }
 
@@ -35,6 +35,9 @@ func (s *OrderService) PlaceOrder(req models.OrderRequest) (*models.OrderRespons
 	// Place order on Binance (idempotent via cache)
 	binanceOrder, err := s.binance.PlaceOrder(req.Symbol, req.Side, req.Price, quantity)
 	if err != nil {
+		// Log the details for debugging
+		log.Printf("Order placement failed - Symbol: %s, Side: %s, Price: %s, Quantity: %s, Error: %v",
+			req.Symbol, req.Side, req.Price, quantity, err)
 		return nil, fmt.Errorf("failed to place order on Binance: %w", err)
 	}
 
@@ -107,7 +110,7 @@ func (s *OrderService) sendFillNotification(order *models.BinanceOrder, filledAm
 		FillPrice:    fillPrice,
 	}
 
-	if err := s.webhookNotifier.SendFillNotification(notification); err != nil {
+	if err := s.gridClient.SendFillNotification(notification); err != nil {
 		log.Printf("Failed to send fill notification for order %d: %v", order.OrderID, err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -71,12 +72,24 @@ func (c *OrderAssuranceClient) PlaceOrder(req OrderRequest) (*OrderResponse, err
 	}
 	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		// Try to parse error response
+		var errorResp map[string]string
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			if msg, ok := errorResp["message"]; ok {
+				return nil, fmt.Errorf("%s", msg)
+			}
+		}
+		return nil, fmt.Errorf("unexpected status code: %d - %s", resp.StatusCode, string(body))
 	}
 
 	var orderResp OrderResponse
-	if err := json.NewDecoder(resp.Body).Decode(&orderResp); err != nil {
+	if err := json.Unmarshal(body, &orderResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 

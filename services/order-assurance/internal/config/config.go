@@ -18,14 +18,7 @@ func LoadConfig() *Config {
 	}
 
 	apiKey := os.Getenv("BINANCE_API_KEY")
-	if apiKey == "" {
-		apiKey = "" // Will fail when trying to place orders
-	}
-
 	apiSecret := os.Getenv("BINANCE_API_SECRET")
-	if apiSecret == "" {
-		apiSecret = "" // Will fail when trying to place orders
-	}
 
 	gridTradingURL := os.Getenv("GRID_TRADING_URL")
 	if gridTradingURL == "" {

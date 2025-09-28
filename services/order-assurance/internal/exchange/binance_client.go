@@ -76,17 +76,31 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 	price = bc.roundToTickSize(price, info.TickSize)
 	quantity = bc.roundToStepSize(quantity, info.StepSize)
 
-	// Validate against restrictions
-	if quantity.LessThan(info.MinQty) {
-		return nil, fmt.Errorf("quantity %s below minimum %s", quantity, info.MinQty)
-	}
-	if quantity.GreaterThan(info.MaxQty) {
-		return nil, fmt.Errorf("quantity %s above maximum %s", quantity, info.MaxQty)
-	}
+	originalQuantity := quantity
 
+	// Adjust quantity to meet minimum notional if needed
 	notional := price.Mul(quantity)
 	if notional.LessThan(info.MinNotional) {
-		return nil, fmt.Errorf("order value %s below minimum notional %s", notional, info.MinNotional)
+		// Calculate minimum quantity needed to meet notional requirement
+		// Add a small buffer (1%) to ensure we meet the requirement
+		minQuantityNeeded := info.MinNotional.Mul(decimal.NewFromFloat(1.01)).Div(price)
+		// Round up to step size
+		quantity = bc.roundUpToStepSize(minQuantityNeeded, info.StepSize)
+		notional = price.Mul(quantity)
+		fmt.Printf("Adjusted quantity from %s to %s to meet minimum notional of %s\n",
+			originalQuantity, quantity, info.MinNotional)
+	}
+
+	// Adjust for minimum quantity restriction
+	if quantity.LessThan(info.MinQty) {
+		quantity = info.MinQty
+		fmt.Printf("Adjusted quantity from %s to %s to meet minimum quantity requirement\n",
+			originalQuantity, quantity)
+	}
+
+	// Check maximum quantity restriction (this one we can't adjust)
+	if quantity.GreaterThan(info.MaxQty) {
+		return nil, fmt.Errorf("required quantity %s exceeds maximum allowed %s", quantity, info.MaxQty)
 	}
 
 	// Check cache for idempotency
@@ -106,6 +120,11 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 	params.Set("price", price.String())
 	params.Set("quantity", quantity.String())
 	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+
+	// Check if we have credentials
+	if bc.apiKey == "" || bc.apiSecret == "" {
+		return nil, fmt.Errorf("Binance API credentials not configured - cannot place orders")
+	}
 
 	// Add signature
 	signature := bc.sign(params.Encode())
@@ -149,6 +168,11 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 
 // GetOrder retrieves order status from Binance
 func (bc *BinanceClient) GetOrder(symbol, orderID string) (*models.BinanceOrder, error) {
+	// Check if we have credentials
+	if bc.apiKey == "" || bc.apiSecret == "" {
+		return nil, fmt.Errorf("Binance API credentials not configured - cannot get order status")
+	}
+
 	params := url.Values{}
 	params.Set("symbol", bc.formatSymbol(symbol))
 	params.Set("orderId", orderID)
@@ -195,6 +219,11 @@ func (bc *BinanceClient) GetOrder(symbol, orderID string) (*models.BinanceOrder,
 
 // GetOpenOrders retrieves all open orders for a symbol
 func (bc *BinanceClient) GetOpenOrders(symbol string) ([]*models.BinanceOrder, error) {
+	// Check if we have credentials
+	if bc.apiKey == "" || bc.apiSecret == "" {
+		return nil, fmt.Errorf("Binance API credentials not configured - cannot get open orders")
+	}
+
 	params := url.Values{}
 	if symbol != "" {
 		params.Set("symbol", bc.formatSymbol(symbol))
@@ -437,6 +466,14 @@ func (bc *BinanceClient) roundToStepSize(quantity, stepSize decimal.Decimal) dec
 		return quantity
 	}
 	return quantity.Div(stepSize).Round(0).Mul(stepSize)
+}
+
+// roundUpToStepSize rounds quantity UP to the nearest step size
+func (bc *BinanceClient) roundUpToStepSize(quantity, stepSize decimal.Decimal) decimal.Decimal {
+	if stepSize.IsZero() {
+		return quantity
+	}
+	return quantity.Div(stepSize).Ceil().Mul(stepSize)
 }
 
 // roundToTickSize rounds a price to the nearest valid tick size

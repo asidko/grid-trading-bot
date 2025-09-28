@@ -69,7 +69,14 @@ func (h *Handlers) handlePlaceOrder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		http.Error(w, "Failed to place order", http.StatusInternalServerError)
+		// Return detailed error as JSON
+		errorResp := map[string]string{
+			"error": "order_failed",
+			"message": errorMsg,
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(errorResp)
 		return
 	}
 

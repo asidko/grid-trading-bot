@@ -14,7 +14,7 @@ import (
 	"github.com/grid-trading-bot/services/order-assurance/internal/config"
 	"github.com/grid-trading-bot/services/order-assurance/internal/exchange"
 	"github.com/grid-trading-bot/services/order-assurance/internal/service"
-	"github.com/grid-trading-bot/services/order-assurance/internal/webhook"
+	"github.com/grid-trading-bot/services/order-assurance/internal/client"
 	"github.com/joho/godotenv"
 )
 
@@ -27,22 +27,24 @@ func main() {
 	// Load configuration
 	cfg := config.LoadConfig()
 
-	// Validate required config
+	// Log whether we have credentials
 	if cfg.BinanceAPIKey == "" || cfg.BinanceSecret == "" {
-		log.Fatal("BINANCE_API_KEY and BINANCE_API_SECRET are required")
+		log.Println("WARNING: Binance API credentials not configured - order placement will fail")
+	} else {
+		log.Println("Binance API credentials configured")
 	}
 
-	// Create Binance client
+	// Create Binance client (works with or without credentials)
 	binanceClient := exchange.NewBinanceClient(
 		cfg.BinanceAPIKey,
 		cfg.BinanceSecret,
 	)
 
-	// Create webhook notifier
-	webhookNotifier := webhook.NewNotifier(cfg.GridTradingURL)
+	// Create grid-trading client notifier
+	gridClient := client.NewNotifier(cfg.GridTradingURL)
 
 	// Create order service
-	orderService := service.NewOrderService(binanceClient, webhookNotifier)
+	orderService := service.NewOrderService(binanceClient, gridClient)
 
 	// Create API handlers
 	handlers := api.NewHandlers(orderService)

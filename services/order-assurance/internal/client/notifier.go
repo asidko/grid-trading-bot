@@ -1,4 +1,4 @@
-package webhook
+package client
 
 import (
 	"bytes"

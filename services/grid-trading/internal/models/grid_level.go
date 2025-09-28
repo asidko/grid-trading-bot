@@ -45,7 +45,7 @@ func (g *GridLevel) CanPlaceBuy(currentPrice decimal.Decimal) bool {
 func (g *GridLevel) CanPlaceSell(currentPrice decimal.Decimal) bool {
 	return g.State == StateHolding &&
 		g.Enabled &&
-		currentPrice.LessThan(g.SellPrice) &&
+		currentPrice.GreaterThanOrEqual(g.SellPrice) &&
 		g.FilledAmount.Valid &&
 		g.FilledAmount.Decimal.GreaterThan(decimal.Zero)
 }

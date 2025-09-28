@@ -115,18 +115,34 @@ func (ws *BinanceWS) readLoop() {
 			return
 		}
 
-		// Parse trade message
+		// When using combined streams, Binance wraps messages
+		var wrapper struct {
+			Stream string          `json:"stream"`
+			Data   json.RawMessage `json:"data"`
+		}
+
+		// Try to parse as wrapped message first
+		if err := json.Unmarshal(message, &wrapper); err == nil && wrapper.Data != nil {
+			// It's a wrapped message, use the inner data
+			message = wrapper.Data
+		}
+
+		// Now parse the actual trade message
 		var trade struct {
 			EventType string `json:"e"`
+			EventTime int64  `json:"E"`
 			Symbol    string `json:"s"`
+			TradeID   int64  `json:"t"`
 			Price     string `json:"p"`
+			Quantity  string `json:"q"`
 		}
 
 		if err := json.Unmarshal(message, &trade); err != nil {
-			log.Printf("Failed to parse message: %v", err)
+			// Silently skip non-trade messages
 			continue
 		}
 
+		// Check if it's a trade event
 		if trade.EventType != "trade" {
 			continue
 		}
