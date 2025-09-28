@@ -13,7 +13,6 @@ services:
       PGPORT: ${DB_PORT}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./services/grid-trading/migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -p ${DB_PORT}"]
       interval: 10s

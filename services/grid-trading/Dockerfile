@@ -22,6 +22,9 @@ WORKDIR /root/
 # Copy the binary from builder
 COPY --from=builder /app/grid-trading .
 
+# Copy migration files
+COPY services/grid-trading/migrations/ ./services/grid-trading/migrations/
+
 EXPOSE 8080
 
 CMD ["./grid-trading"]

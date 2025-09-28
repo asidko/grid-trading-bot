@@ -22,9 +22,9 @@ CREATE TABLE IF NOT EXISTS grid_levels (
 );
 
 -- Create indexes for performance
-CREATE INDEX idx_grid_levels_symbol ON grid_levels(symbol);
-CREATE INDEX idx_grid_levels_state ON grid_levels(state);
-CREATE INDEX idx_grid_levels_buy_order_id ON grid_levels(buy_order_id);
-CREATE INDEX idx_grid_levels_sell_order_id ON grid_levels(sell_order_id);
-CREATE INDEX idx_grid_levels_enabled ON grid_levels(enabled);
-CREATE INDEX idx_grid_levels_state_changed_at ON grid_levels(state_changed_at);
+CREATE INDEX IF NOT EXISTS idx_grid_levels_symbol ON grid_levels(symbol);
+CREATE INDEX IF NOT EXISTS idx_grid_levels_state ON grid_levels(state);
+CREATE INDEX IF NOT EXISTS idx_grid_levels_buy_order_id ON grid_levels(buy_order_id);
+CREATE INDEX IF NOT EXISTS idx_grid_levels_sell_order_id ON grid_levels(sell_order_id);
+CREATE INDEX IF NOT EXISTS idx_grid_levels_enabled ON grid_levels(enabled);
+CREATE INDEX IF NOT EXISTS idx_grid_levels_state_changed_at ON grid_levels(state_changed_at);
