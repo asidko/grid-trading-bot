@@ -1,0 +1,29 @@
+{
+  "name": "Shift Scheduling Algorithm",
+  "dockerFile": "Dockerfile",
+  
+  "features": {},
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-vscode.makefile-tools",
+        "streetsidesoftware.code-spell-checker"
+      ],
+      "settings": {
+        "go.toolsManagement.checkForUpdates": "local",
+        "go.useLanguageServer": true,
+        "go.gopath": "/home/ubuntu/go",
+        "go.goroot": "/usr/lib/go",
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  "forwardPorts": [],
+  
+  "postCreateCommand": "cd /workspaces/llm-algorithm/src && go mod download || true",
+  
+  "remoteUser": "ubuntu"
+}
