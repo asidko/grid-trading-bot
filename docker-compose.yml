@@ -71,5 +71,47 @@ services:
     depends_on:
       - grid-trading
 
+  # Postgres UI
+  # http://localhost:8082/
+  pgadmin:
+    image: dpage/pgadmin4:9
+    container_name: grid-trading-pgadmin
+    network_mode: host
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=postgres@example.com
+      - PGADMIN_DEFAULT_PASSWORD=postgres
+      - PGADMIN_CONFIG_SERVER_MODE=False
+      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
+      - PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=False
+      - PGADMIN_CONFIG_WTF_CSRF_CHECK_DEFAULT=False
+    entrypoint: /bin/sh -c "chmod 600 /pgpass; /entrypoint.sh;"
+    user: root
+    configs:
+      - source: servers.json
+        target: /pgadmin4/servers.json
+      - source: pgpass
+        target: /pgpass
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+# Configure automatic connection for Postgres UI
+configs:
+  pgpass:
+    content: |
+      localhost:${DB_PORT}:*:${DB_USER}:${DB_PASSWORD}
+  servers.json:
+    content: |
+      {"Servers": {"1": {
+        "Group": "Servers",
+        "Name": "${DB_NAME}-server",
+        "Host": "localhost",
+        "Port": ${DB_PORT},
+        "MaintenanceDB": "${DB_NAME}",
+        "Username": "${DB_USER}",
+        "PassFile": "/pgpass",
+        "SSLMode": "prefer"
+      }}}
+
 volumes:
   postgres_data:
