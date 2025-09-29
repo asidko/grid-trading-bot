@@ -8,35 +8,38 @@ import (
 	"os"
 	"os/signal"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/grid-trading-bot/services/price-monitor/internal/client"
 	"github.com/grid-trading-bot/services/price-monitor/internal/config"
-	"github.com/grid-trading-bot/services/price-monitor/internal/websocket"
+	"github.com/grid-trading-bot/services/price-monitor/internal/ticker"
 	"github.com/shopspring/decimal"
 )
 
 type PriceMonitor struct {
-	cfg           *config.Config
-	ws            *websocket.BinanceWS
-	gridClient    *client.GridTradingClient
-	lastTrigger   map[string]time.Time
-	lastPrice     map[string]decimal.Decimal
-	mu            sync.RWMutex
+	cfg         *config.Config
+	ticker      *ticker.BinanceTicker
+	gridClient  *client.GridTradingClient
+	lastTrigger map[string]time.Time
+	lastPrice   map[string]decimal.Decimal
+	mu          sync.RWMutex
 
-	ctx           context.Context
-	cancel        context.CancelFunc
-	connected     atomic.Bool
-	wg            sync.WaitGroup
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+
+	lastCheckTime time.Time
+	checkCount    int64
+	errorCount    int64
 }
 
 func NewPriceMonitor(cfg *config.Config) *PriceMonitor {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &PriceMonitor{
 		cfg:         cfg,
+		ticker:      ticker.NewBinanceTicker(),
 		gridClient:  client.NewGridTradingClient(cfg.GridTradingURL),
 		lastTrigger: make(map[string]time.Time),
 		lastPrice:   make(map[string]decimal.Decimal),
@@ -51,118 +54,90 @@ func (pm *PriceMonitor) Start() error {
 		log.Fatal("No symbols configured for monitoring")
 	}
 
-	// Start the connection manager
+	log.Printf("Starting price monitor with polling interval: %dms", pm.cfg.PriceCheckIntervalMs)
+	log.Printf("Monitoring symbols: %v", pm.cfg.MonitoredSymbols)
+	log.Printf("Min price change for trigger: %.4f%%", pm.cfg.MinPriceChangePct)
+
+	// Start the polling loop
 	pm.wg.Add(1)
-	go pm.connectionManager()
+	go pm.pollingLoop()
 
 	return nil
 }
 
-func (pm *PriceMonitor) connectionManager() {
+func (pm *PriceMonitor) pollingLoop() {
 	defer pm.wg.Done()
 
-	reconnectDelay := 1 * time.Second
-	maxReconnectDelay := 60 * time.Second
+	checkInterval := time.Duration(pm.cfg.PriceCheckIntervalMs) * time.Millisecond
+	ticker := time.NewTicker(checkInterval)
+	defer ticker.Stop()
+
+	// Do initial check immediately
+	pm.checkPrices()
 
 	for {
 		select {
 		case <-pm.ctx.Done():
 			return
-		default:
-		}
-
-		// Create and connect
-		pm.ws = websocket.NewBinanceWS(pm.cfg.MonitoredSymbols)
-		if err := pm.ws.Connect(); err != nil {
-			log.Printf("Connection failed: %v, retrying in %v", err, reconnectDelay)
-			time.Sleep(reconnectDelay)
-
-			// Exponential backoff
-			reconnectDelay *= 2
-			if reconnectDelay > maxReconnectDelay {
-				reconnectDelay = maxReconnectDelay
-			}
-			continue
-		}
-
-		pm.connected.Store(true)
-		reconnectDelay = 1 * time.Second // Reset delay on successful connection
-		log.Printf("Connected to Binance WebSocket for symbols: %v", pm.cfg.MonitoredSymbols)
-
-		// Process updates until error
-		pm.processUpdates()
-
-		pm.connected.Store(false)
-
-		// Clean up old connection
-		if pm.ws != nil {
-			pm.ws.Close()
-			pm.ws = nil
-		}
-
-		// Check if we should exit
-		select {
-		case <-pm.ctx.Done():
-			return
-		case <-time.After(reconnectDelay):
-			// Continue to reconnect
+		case <-ticker.C:
+			pm.checkPrices()
 		}
 	}
 }
 
-func (pm *PriceMonitor) processUpdates() {
-	for {
-		select {
-		case <-pm.ctx.Done():
-			return
+func (pm *PriceMonitor) checkPrices() {
+	pm.mu.Lock()
+	pm.lastCheckTime = time.Now()
+	pm.checkCount++
+	pm.mu.Unlock()
 
-		case update, ok := <-pm.ws.PriceChannel():
-			if !ok {
-				return // Channel closed, need to reconnect
-			}
-			pm.handlePriceUpdate(update)
+	// Fetch prices for all symbols
+	prices, err := pm.ticker.GetPrices(pm.cfg.MonitoredSymbols)
+	if err != nil {
+		pm.mu.Lock()
+		pm.errorCount++
+		pm.mu.Unlock()
+		log.Printf("Failed to fetch prices: %v", err)
+		return
+	}
 
-		case err, ok := <-pm.ws.ErrorChannel():
-			if !ok {
-				return // Channel closed
-			}
-			log.Printf("WebSocket error: %v", err)
-			return // Exit to trigger reconnection
-		}
+	// Process each price update
+	for symbol, price := range prices {
+		pm.handlePriceUpdate(symbol, price)
 	}
 }
 
-func (pm *PriceMonitor) handlePriceUpdate(update websocket.PriceUpdate) {
+func (pm *PriceMonitor) handlePriceUpdate(symbol string, price decimal.Decimal) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	// Check if we should throttle this update
-	if lastTime, ok := pm.lastTrigger[update.Symbol]; ok {
+	if lastTime, ok := pm.lastTrigger[symbol]; ok {
 		if time.Since(lastTime) < time.Duration(pm.cfg.TriggerIntervalMs)*time.Millisecond {
 			return // Skip - too soon
 		}
 	}
 
-	// Check if price changed significantly (0.01% change)
-	if lastPrice, ok := pm.lastPrice[update.Symbol]; ok {
-		change := update.Price.Sub(lastPrice).Abs().Div(lastPrice)
-		if change.LessThan(decimal.NewFromFloat(0.0001)) {
+	// Check if price changed significantly
+	if lastPrice, ok := pm.lastPrice[symbol]; ok {
+		change := price.Sub(lastPrice).Abs().Div(lastPrice).Mul(decimal.NewFromInt(100))
+		if change.LessThan(decimal.NewFromFloat(pm.cfg.MinPriceChangePct)) {
 			return // Skip - insignificant change
 		}
 	}
 
 	// Send trigger to grid-trading
-	if err := pm.gridClient.SendPriceTrigger(update.Symbol, update.Price); err != nil {
+	if err := pm.gridClient.SendPriceTrigger(symbol, price); err != nil {
 		log.Printf("Failed to send trigger for %s at %s: %v",
-			update.Symbol, update.Price, err)
+			symbol, price, err)
 		return
 	}
 
 	// Update tracking
-	pm.lastTrigger[update.Symbol] = time.Now()
-	pm.lastPrice[update.Symbol] = update.Price
+	pm.lastTrigger[symbol] = time.Now()
+	pm.lastPrice[symbol] = price
 
-	log.Printf("Triggered %s at %s", update.Symbol, update.Price)
+	log.Printf("Triggered %s at %s", symbol, price)
 }
 
 func (pm *PriceMonitor) GetStatus() map[string]interface{} {
@@ -170,8 +145,12 @@ func (pm *PriceMonitor) GetStatus() map[string]interface{} {
 	defer pm.mu.RUnlock()
 
 	status := make(map[string]interface{})
-	status["connected"] = pm.connected.Load()
+	status["monitoring"] = true
 	status["monitored_symbols"] = pm.cfg.MonitoredSymbols
+	status["price_check_interval_ms"] = pm.cfg.PriceCheckIntervalMs
+	status["check_count"] = pm.checkCount
+	status["error_count"] = pm.errorCount
+	status["last_check_time"] = pm.lastCheckTime.Format(time.RFC3339)
 
 	lastPrices := make(map[string]string)
 	for symbol, price := range pm.lastPrice {
@@ -192,10 +171,6 @@ func (pm *PriceMonitor) Shutdown() {
 	log.Println("Shutting down price monitor...")
 	pm.cancel()
 	pm.wg.Wait()
-
-	if pm.ws != nil {
-		pm.ws.Close()
-	}
 }
 
 func main() {
@@ -216,11 +191,7 @@ func main() {
 	// Health check endpoint
 	router.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		status := "healthy"
-		if !monitor.connected.Load() {
-			status = "reconnecting"
-		}
-		json.NewEncoder(w).Encode(map[string]string{"status": status})
+		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 	})
 
 	// Status endpoint
@@ -237,8 +208,7 @@ func main() {
 
 	go func() {
 		log.Printf("Price Monitor starting on port %s", cfg.ServerPort)
-		log.Printf("Monitoring symbols: %v", cfg.MonitoredSymbols)
-		log.Println("Using Binance Production WebSocket")
+		log.Printf("Using Binance REST API with polling")
 
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("Server failed:", err)

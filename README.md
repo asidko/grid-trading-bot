@@ -1,129 +1,143 @@
 # Grid Trading Bot
 
-A multi-service Golang application implementing a grid trading strategy for cryptocurrency markets using Binance Spot API.
+Automated cryptocurrency trading bot that profits from market volatility by buying low and selling high at predefined price levels.
 
-## Architecture
+## What is Grid Trading?
 
-The system consists of three microservices:
+Grid trading splits a price range into levels. The bot automatically buys when price drops to each level, then sells when price rises.
 
-### 1. Grid Trading Service (Port 8080)
-Manages grid levels and trading logic:
-- Places buy orders when price drops to predefined levels
-- Places sell orders when price rises after a buy fill
-- Operates independently across multiple price levels
-- Handles crash recovery and missed notifications
+**Example**: ETH grid from $3000-$4000 with $100 steps
+- Buy at $3000 → Sell at $3100 → $100 profit
+- Buy at $3100 → Sell at $3200 → $100 profit
+- And so on...
 
-### 2. Order Assurance Service (Port 9090)
-Interfaces with Binance Spot API:
-- Places idempotent limit orders on Binance
-- Enforces symbol trading restrictions (min quantity, tick size)
-- Sends webhook notifications back to grid-trading service
-- Uses Binance as the source of truth (no local database)
+Each level operates independently, generating profits from price movements in both directions.
 
-### 3. Price Monitor Service (Port 7070)
-Real-time price monitoring:
-- Connects to Binance WebSocket for live price feeds
-- Triggers grid-trading service on price changes
-- Auto-reconnects with exponential backoff
-- Configurable price change thresholds
+## Documentation
 
-## Quick Start with Docker Compose
+- **[IDEA.md](IDEA.md)** - Strategy concept
+- **[SPEC.md](SPEC.md)** - Technical specification
 
-1. **Configure Environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your Binance API credentials
-   ```
+## Quick Start
 
-2. **Start All Services**
-   ```bash
-   docker-compose up -d
-   ```
+### 1. Setup
 
-   > **Note:** Services use host network mode, so they'll be accessible on localhost:
-   > - Grid Trading: http://localhost:8080
-   > - Order Assurance: http://localhost:9090
-   > - Price Monitor: http://localhost:7070
-   > - PostgreSQL: localhost:5432
-
-3. **Check Health**
-   ```bash
-   ./scripts/health-check.sh
-   ```
-
-4. **View Logs**
-   ```bash
-   docker-compose logs -f
-   ```
-
-5. **Initialize Grid Levels**
-   ```bash
-   # Example: ETH grid from $3000-$4000 with $100 steps
-   make init-grid SYMBOL=ETH MIN=3000 MAX=4000 STEP=100 AMOUNT=1000
-   ```
-
-6. **Stop Services**
-   ```bash
-   docker-compose down
-   ```
-
-## Local Development
-
-1. **Start PostgreSQL**
-   ```bash
-   docker-compose up -d postgres
-   ```
-
-2. **Configure Environment**
-   ```bash
-   cp .env.example .env
-   # Edit .env - use DB_HOST=localhost for local dev
-   ```
-
-3. **Run Services**
-   ```bash
-   # Run all services locally
-   make run-all
-
-   # Or run individually:
-   make run-assurance  # Order assurance service
-   make run-grid       # Grid trading service
-   make run-monitor    # Price monitor service
-   ```
-
-## API Endpoints
-
-- `POST /trigger-for-price` - Process price updates
-- `POST /order-fill-notification` - Handle order fills
-- `POST /order-fill-error-notification` - Handle order errors
-- `GET /health` - Health check
-
-## State Machine
-
+```bash
+# Copy and edit config
+cp .env.example .env
+nano .env  # Add your Binance API keys
 ```
-READY → PLACING_BUY → BUY_ACTIVE → HOLDING → PLACING_SELL → SELL_ACTIVE → READY
+
+**Required**:
+- `BINANCE_API_KEY` - Your API key
+- `BINANCE_API_SECRET` - Your API secret
+
+**Optional**:
+- `MONITORED_SYMBOLS=ETH,BTC` - Symbols to trade
+- `PRICE_CHECK_INTERVAL_MS=10000` - Check prices every 10s
+- `TRIGGER_INTERVAL_MS=5000` - Min 5s between triggers
+
+### 2. Start
+
+```bash
+docker-compose up -d
+```
+
+Services run on localhost:
+- Grid Trading: 8080
+- Order Assurance: 9090
+- Price Monitor: 7070
+
+### 3. Initialize Grid
+
+```bash
+# Example: ETH between $3000-$4000, $100 steps, $1000 per trade
+make init-grid SYMBOL=ETH MIN=3000 MAX=4000 STEP=100 AMOUNT=1000
+```
+
+### 4. Monitor
+
+```bash
+# View logs
+docker-compose logs -f
+
+# Check status
+curl http://localhost:7070/status
+
+# Stop
+docker-compose down
 ```
 
 ## Configuration
 
+### Essential Variables
+
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `SERVER_PORT` | HTTP server port | 8080 |
-| `DB_HOST` | PostgreSQL host | localhost |
-| `DB_PORT` | PostgreSQL port | 5432 |
-| `ORDER_ASSURANCE_URL` | Order service URL | http://localhost:9090 |
-| `SYNC_JOB_ENABLED` | Enable recovery job | true |
-| `SYNC_JOB_CRON` | Sync schedule | 0 * * * * (hourly) |
+| `BINANCE_API_KEY` | Binance API key | *required* |
+| `BINANCE_API_SECRET` | Binance API secret | *required* |
+| `MONITORED_SYMBOLS` | Symbols to trade | ETH,BTC,BNB |
+| `PRICE_CHECK_INTERVAL_MS` | Price check frequency | 10000 (10s) |
+| `TRIGGER_INTERVAL_MS` | Min time between triggers | 5000 (5s) |
+| `MIN_PRICE_CHANGE_PCT` | Min price change to trigger | 0.01 (0.01%) |
+
+### Service Ports
+
+| Variable | Port | Service |
+|----------|------|---------|
+| `GRID_PORT` | 8080 | Grid trading logic |
+| `ASSURANCE_PORT` | 9090 | Order placement |
+| `MONITOR_PORT` | 7070 | Price monitoring |
+
+<details>
+<summary>All Configuration Options</summary>
+
+**Database**:
+- `DB_HOST=localhost`
+- `DB_PORT=5432`
+- `DB_USER=postgres`
+- `DB_PASSWORD=postgres`
+- `DB_NAME=grid_trading`
+
+**Internal URLs**:
+- `ORDER_ASSURANCE_URL=http://localhost:9090`
+- `GRID_TRADING_URL=http://localhost:8080`
+
+**Recovery Job**:
+- `SYNC_JOB_ENABLED=true` - Hourly order sync
+- `SYNC_JOB_CRON=0 * * * *` - Cron schedule
+
+</details>
+
+## Troubleshooting
+
+**Bot not placing orders?**
+```bash
+docker-compose logs -f grid
+# Check: Grid levels initialized? Price in range?
+```
+
+**Binance connection errors?**
+- Verify API keys in `.env`
+- Check API permissions (Spot trading enabled)
+- Ensure system time is synced
+
+**Price monitor not working?**
+```bash
+curl http://localhost:7070/status
+# Check: Symbols match? MIN_PRICE_CHANGE_PCT too high?
+```
 
 ## Development
 
 ```bash
-# Run tests
-make test
-
-# Clean build artifacts
-make clean
-
-# Stop database
-make docker-down
+# Run locally without Docker
+docker-compose up -d postgres
+make run-all
 ```
+
+## Requirements
+
+- Docker & Docker Compose
+- Binance account ([Get API keys](https://www.binance.com/en/my/settings/api-management))
+- USDT funds in Binance Spot account (5k for example, for investing 1k$ per level to cover at least 5 levels of price move; expected daily revenue ~30$/day on ETH at 2025)

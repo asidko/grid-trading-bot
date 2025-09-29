@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -87,14 +88,14 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 		// Round up to step size
 		quantity = bc.roundUpToStepSize(minQuantityNeeded, info.StepSize)
 		notional = price.Mul(quantity)
-		fmt.Printf("Adjusted quantity from %s to %s to meet minimum notional of %s\n",
+		log.Printf("Adjusted quantity from %s to %s to meet minimum notional of %s",
 			originalQuantity, quantity, info.MinNotional)
 	}
 
 	// Adjust for minimum quantity restriction
 	if quantity.LessThan(info.MinQty) {
 		quantity = info.MinQty
-		fmt.Printf("Adjusted quantity from %s to %s to meet minimum quantity requirement\n",
+		log.Printf("Adjusted quantity from %s to %s to meet minimum quantity requirement",
 			originalQuantity, quantity)
 	}
 
@@ -120,6 +121,7 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 	params.Set("price", price.String())
 	params.Set("quantity", quantity.String())
 	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000") // 5 seconds - Binance recommended value
 
 	// Check if we have credentials
 	if bc.apiKey == "" || bc.apiSecret == "" {
@@ -144,6 +146,11 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 	}
 	defer resp.Body.Close()
 
+	// Log rate limit headers for monitoring
+	if weight := resp.Header.Get("X-MBX-USED-WEIGHT-1M"); weight != "" {
+		log.Printf("Binance API weight used: %s/6000", weight)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
@@ -152,6 +159,13 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 	if resp.StatusCode != http.StatusOK {
 		var errResp map[string]interface{}
 		json.Unmarshal(body, &errResp)
+
+		// Special handling for rate limit errors
+		if resp.StatusCode == 429 {
+			retryAfter := resp.Header.Get("Retry-After")
+			return nil, fmt.Errorf("binance rate limit exceeded (429), retry after: %s, error: %v", retryAfter, errResp)
+		}
+
 		return nil, fmt.Errorf("binance error %d: %v", resp.StatusCode, errResp)
 	}
 
@@ -177,6 +191,7 @@ func (bc *BinanceClient) GetOrder(symbol, orderID string) (*models.BinanceOrder,
 	params.Set("symbol", bc.formatSymbol(symbol))
 	params.Set("orderId", orderID)
 	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
 
 	signature := bc.sign(params.Encode())
 	params.Set("signature", signature)
@@ -229,6 +244,7 @@ func (bc *BinanceClient) GetOpenOrders(symbol string) ([]*models.BinanceOrder, e
 		params.Set("symbol", bc.formatSymbol(symbol))
 	}
 	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
 
 	signature := bc.sign(params.Encode())
 	params.Set("signature", signature)
