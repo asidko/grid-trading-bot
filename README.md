@@ -51,9 +51,19 @@ Services run on localhost:
 ### 3. Initialize Grid
 
 ```bash
-# Example: ETH between $3000-$4000, $100 steps, $1000 per trade
-make init-grid SYMBOL=ETH MIN=3000 MAX=4000 STEP=100 AMOUNT=1000
+# Example: ETH between $3800-$4200, $100 steps, $1000 USDT per level
+curl -X POST http://localhost:8080/grids \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "ETHUSDT",
+    "min_price": 3800,
+    "max_price": 4200,
+    "grid_step": 100,
+    "buy_amount": 1000
+  }'
 ```
+
+This creates grid levels at: 3800, 3900, 4000, 4100, 4200
 
 ### 4. Monitor
 
