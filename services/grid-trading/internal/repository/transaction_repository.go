@@ -97,25 +97,7 @@ func (r *TransactionRepository) RecordBuyError(
 	errorCode string,
 	errorMsg string,
 ) error {
-	query := `
-		INSERT INTO transactions (
-			grid_level_id, symbol, side, status,
-			target_price, error_code, error_msg
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`
-
-	_, err := r.db.Exec(
-		query,
-		gridLevelID,
-		symbol,
-		models.SideBuy,
-		models.StatusError,
-		targetPrice,
-		errorCode,
-		errorMsg,
-	)
-
-	return err
+	return r.recordError(gridLevelID, symbol, targetPrice, errorCode, errorMsg, string(models.SideBuy))
 }
 
 func (r *TransactionRepository) RecordSellError(
@@ -125,18 +107,40 @@ func (r *TransactionRepository) RecordSellError(
 	errorCode string,
 	errorMsg string,
 ) error {
+	return r.recordError(gridLevelID, symbol, targetPrice, errorCode, errorMsg, string(models.SideSell))
+}
+
+func (r *TransactionRepository) recordError(
+	gridLevelID int,
+	symbol string,
+	targetPrice decimal.Decimal,
+	errorCode string,
+	errorMsg string,
+	side string,
+) error {
 	query := `
 		INSERT INTO transactions (
 			grid_level_id, symbol, side, status,
 			target_price, error_code, error_msg
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		)
+		SELECT $1, $2, $3, $4, $5, $6, $7
+		WHERE NOT EXISTS (
+			SELECT 1 FROM transactions
+			WHERE grid_level_id = $1
+			  AND symbol = $2
+			  AND side = $3
+			  AND status = $4
+			  AND target_price = $5
+			  AND error_msg = $7
+			  AND created_at > NOW() - INTERVAL '1 hour'
+		)
 	`
 
 	_, err := r.db.Exec(
 		query,
 		gridLevelID,
 		symbol,
-		models.SideSell,
+		side,
 		models.StatusError,
 		targetPrice,
 		errorCode,

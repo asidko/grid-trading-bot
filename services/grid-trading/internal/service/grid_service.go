@@ -20,6 +20,7 @@ type GridLevelRepositoryInterface interface {
 	GetBySellOrderID(orderID string) (*models.GridLevel, error)
 	GetStuckInPlacingState(timeout time.Duration) ([]*models.GridLevel, error)
 	GetAllActive() ([]*models.GridLevel, error)
+	GetDistinctSymbols() ([]string, error)
 
 	// State management operations
 	TryStartBuyOrder(id int) (bool, error)
@@ -57,15 +58,17 @@ type GridService struct {
 	repo       GridLevelRepositoryInterface
 	txRepo     TransactionRepositoryInterface
 	assurance  OrderAssuranceInterface
+	tradingFee float64
 }
 
 // NewGridService creates a new GridService
 // Accepts both concrete types and interfaces (Go's interface satisfaction is implicit)
-func NewGridService(repo GridLevelRepositoryInterface, txRepo TransactionRepositoryInterface, assurance OrderAssuranceInterface) *GridService {
+func NewGridService(repo GridLevelRepositoryInterface, txRepo TransactionRepositoryInterface, assurance OrderAssuranceInterface, tradingFee float64) *GridService {
 	return &GridService{
-		repo:      repo,
-		txRepo:    txRepo,
-		assurance: assurance,
+		repo:       repo,
+		txRepo:     txRepo,
+		assurance:  assurance,
+		tradingFee: tradingFee,
 	}
 }
 
@@ -248,16 +251,23 @@ func (s *GridService) ProcessSellFillNotification(orderID string, filledAmount, 
 		return fmt.Errorf("failed to process sell fill: %w", err)
 	}
 
-	// Record transaction with profit
+	// Record transaction with profit (including fees)
 	sellAmountUSDT := filledAmount.Mul(fillPrice)
 	var relatedBuyID int
 	var profitUSDT, profitPct decimal.Decimal
 
 	if buyTx != nil && buyTx.AmountUSDT.Valid && buyTx.AmountUSDT.Decimal.GreaterThan(decimal.Zero) {
 		relatedBuyID = buyTx.ID
-		profitUSDT = sellAmountUSDT.Sub(buyTx.AmountUSDT.Decimal)
+
+		// Calculate fees: buy fee + sell fee
+		buyFee := buyTx.AmountUSDT.Decimal.Mul(decimal.NewFromFloat(s.tradingFee / 100))
+		sellFee := sellAmountUSDT.Mul(decimal.NewFromFloat(s.tradingFee / 100))
+		totalFees := buyFee.Add(sellFee)
+
+		// Profit = Sell Amount - Buy Amount - Total Fees
+		profitUSDT = sellAmountUSDT.Sub(buyTx.AmountUSDT.Decimal).Sub(totalFees)
 		profitPct = profitUSDT.Div(buyTx.AmountUSDT.Decimal).Mul(decimal.NewFromInt(100))
-		log.Printf("Processed sell fill for level %d, cycle complete. Profit: %s USDT (%s%%)", level.ID, profitUSDT, profitPct)
+		log.Printf("Processed sell fill for level %d, cycle complete. Profit: %s USDT (%s%%) [Fees: %s USDT]", level.ID, profitUSDT, profitPct, totalFees)
 	} else {
 		log.Printf("Processed sell fill for level %d, cycle complete. Profit: N/A (no buy transaction)", level.ID)
 	}
@@ -301,36 +311,6 @@ func (s *GridService) ProcessErrorNotification(orderID string, side string, erro
 	}
 
 	log.Printf("Level %d set to ERROR state: %s", level.ID, errorMsg)
-	return nil
-}
-
-func (s *GridService) InitializeGrid(symbol string, minPrice, maxPrice, gridStep, buyAmount decimal.Decimal) error {
-	currentPrice := minPrice
-
-	for currentPrice.LessThan(maxPrice) {
-		sellPrice := currentPrice.Add(gridStep)
-		if sellPrice.GreaterThan(maxPrice) {
-			sellPrice = maxPrice
-		}
-
-		level := &models.GridLevel{
-			Symbol:    symbol,
-			BuyPrice:  currentPrice,
-			SellPrice: sellPrice,
-			BuyAmount: buyAmount,
-		}
-
-		if err := s.repo.Create(level); err != nil {
-			return fmt.Errorf("failed to create level: %w", err)
-		}
-
-		if level.ID > 0 {
-			log.Printf("Created grid level %d: buy=%s, sell=%s", level.ID, currentPrice, sellPrice)
-		}
-
-		currentPrice = currentPrice.Add(gridStep)
-	}
-
 	return nil
 }
 
@@ -514,4 +494,9 @@ func (s *GridService) GetGridLevels(symbol string) ([]*models.GridLevel, error) 
 // GetAllGridLevels retrieves all grid levels
 func (s *GridService) GetAllGridLevels() ([]*models.GridLevel, error) {
 	return s.repo.GetAll()
+}
+
+// GetGridSymbols retrieves all distinct symbols used in grid levels
+func (s *GridService) GetGridSymbols() ([]string, error) {
+	return s.repo.GetDistinctSymbols()
 }

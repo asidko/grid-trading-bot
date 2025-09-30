@@ -4,13 +4,11 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 )
 
 type Config struct {
 	ServerPort           string
 	GridTradingURL       string
-	MonitoredSymbols     []string
 	PriceCheckIntervalMs int
 	TriggerIntervalMs    int
 	MinPriceChangePct    float64
@@ -28,11 +26,6 @@ func LoadConfig() *Config {
 		log.Fatal("GRID_TRADING_URL is required")
 	}
 
-	monitoredSymbols := os.Getenv("MONITORED_SYMBOLS")
-	if monitoredSymbols == "" {
-		log.Fatal("MONITORED_SYMBOLS is required")
-	}
-
 	priceCheckIntervalStr := os.Getenv("PRICE_CHECK_INTERVAL_MS")
 	if priceCheckIntervalStr == "" {
 		priceCheckIntervalStr = "10000" // Default to 10 seconds
@@ -46,14 +39,6 @@ func LoadConfig() *Config {
 	minPriceChangeStr := os.Getenv("MIN_PRICE_CHANGE_PCT")
 	if minPriceChangeStr == "" {
 		minPriceChangeStr = "0.01" // Default to 0.01%
-	}
-
-	symbols := strings.Split(monitoredSymbols, ",")
-	for i := range symbols {
-		symbols[i] = strings.TrimSpace(symbols[i])
-		if symbols[i] == "" {
-			log.Fatal("Empty symbol in MONITORED_SYMBOLS")
-		}
 	}
 
 	priceCheckInterval, err := strconv.Atoi(priceCheckIntervalStr)
@@ -74,7 +59,6 @@ func LoadConfig() *Config {
 	return &Config{
 		ServerPort:           serverPort,
 		GridTradingURL:       gridTradingURL,
-		MonitoredSymbols:     symbols,
 		PriceCheckIntervalMs: priceCheckInterval,
 		TriggerIntervalMs:    triggerInterval,
 		MinPriceChangePct:    minPriceChange,

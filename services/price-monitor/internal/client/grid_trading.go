@@ -56,3 +56,26 @@ func (c *GridTradingClient) SendPriceTrigger(symbol string, price decimal.Decima
 
 	return nil
 }
+
+type GridSymbolsResponse struct {
+	Symbols []string `json:"symbols"`
+}
+
+func (c *GridTradingClient) GetGridSymbols() ([]string, error) {
+	resp, err := c.httpClient.Get(c.baseURL + "/levels/symbols")
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch grid symbols: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var result GridSymbolsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.Symbols, nil
+}

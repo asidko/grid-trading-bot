@@ -22,9 +22,10 @@ func NewHandlers(gridService *service.GridService) *Handlers {
 
 func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	// Grid management endpoints
-	r.HandleFunc("/grids", h.handleCreateGrid).Methods("POST")
-	r.HandleFunc("/grids", h.handleGetAllGrids).Methods("GET")
-	r.HandleFunc("/grids/{symbol}", h.handleGetGrids).Methods("GET")
+	r.HandleFunc("/levels/init", h.handleCreateGrid).Methods("POST")
+	r.HandleFunc("/levels/symbols", h.handleGetGridSymbols).Methods("GET")
+	r.HandleFunc("/levels", h.handleGetAllGrids).Methods("GET")
+	r.HandleFunc("/levels/{symbol}", h.handleGetGrids).Methods("GET")
 
 	// Webhook endpoints
 	r.HandleFunc("/trigger-for-price", h.handlePriceTrigger).Methods("POST")
@@ -225,4 +226,19 @@ func (h *Handlers) handleGetAllGrids(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(levels)
+}
+
+func (h *Handlers) handleGetGridSymbols(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Fetching grid symbols")
+
+	symbols, err := h.gridService.GetGridSymbols()
+	if err != nil {
+		log.Printf("Error fetching grid symbols: %v", err)
+		http.Error(w, "Failed to fetch grid symbols", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string][]string{"symbols": symbols})
 }

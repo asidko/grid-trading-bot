@@ -1,6 +1,6 @@
-.PHONY: setup levels up down logs clean build test
+.PHONY: init levels up down logs clean build test
 
-setup:
+init:
 	@echo "Setting up grid trading bot..."
 	@test -f .env || cp .env.example .env
 	@echo "✓ Configuration ready (edit .env with your Binance API keys)"
@@ -56,7 +56,7 @@ levels:
 	buy_amount=$${buy_amount:-1000}; \
 	echo ""; \
 	echo "  Creating $$symbol grid: $$min_price - $$max_price (step: $$grid_step, amount: $$buy_amount USDT)..."; \
-	curl -s -X POST http://localhost:8080/grids \
+	curl -s -X POST http://localhost:8080/levels/init \
 		-H "Content-Type: application/json" \
 		-d "{\"symbol\":\"$$symbol\",\"min_price\":$$min_price,\"max_price\":$$max_price,\"grid_step\":$$grid_step,\"buy_amount\":$$buy_amount}" \
 		&& echo "  ✓ Grid levels created successfully" \

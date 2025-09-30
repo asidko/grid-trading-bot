@@ -24,15 +24,17 @@ type PriceMonitor struct {
 	gridClient  *client.GridTradingClient
 	lastTrigger map[string]time.Time
 	lastPrice   map[string]decimal.Decimal
+	symbols     []string
 	mu          sync.RWMutex
 
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
-	lastCheckTime time.Time
-	checkCount    int64
-	errorCount    int64
+	lastCheckTime    time.Time
+	lastSymbolsFetch time.Time
+	checkCount       int64
+	errorCount       int64
 }
 
 func NewPriceMonitor(cfg *config.Config) *PriceMonitor {
@@ -49,19 +51,34 @@ func NewPriceMonitor(cfg *config.Config) *PriceMonitor {
 }
 
 func (pm *PriceMonitor) Start() error {
-	// Validate configuration
-	if len(pm.cfg.MonitoredSymbols) == 0 {
-		log.Fatal("No symbols configured for monitoring")
+	// Fetch symbols from grid service
+	if err := pm.refreshSymbols(); err != nil {
+		log.Printf("Warning: Failed to fetch symbols from grid service: %v", err)
+		log.Printf("Will retry in next cycle")
 	}
 
 	log.Printf("Starting price monitor with polling interval: %dms", pm.cfg.PriceCheckIntervalMs)
-	log.Printf("Monitoring symbols: %v", pm.cfg.MonitoredSymbols)
 	log.Printf("Min price change for trigger: %.4f%%", pm.cfg.MinPriceChangePct)
 
 	// Start the polling loop
 	pm.wg.Add(1)
 	go pm.pollingLoop()
 
+	return nil
+}
+
+func (pm *PriceMonitor) refreshSymbols() error {
+	symbols, err := pm.gridClient.GetGridSymbols()
+	if err != nil {
+		return err
+	}
+
+	pm.mu.Lock()
+	pm.symbols = symbols
+	pm.lastSymbolsFetch = time.Now()
+	pm.mu.Unlock()
+
+	log.Printf("Monitoring symbols: %v", symbols)
 	return nil
 }
 
@@ -80,6 +97,16 @@ func (pm *PriceMonitor) pollingLoop() {
 		case <-pm.ctx.Done():
 			return
 		case <-ticker.C:
+			// Refresh symbols every other run (on even check counts)
+			pm.mu.RLock()
+			shouldRefresh := pm.checkCount%2 == 0
+			pm.mu.RUnlock()
+
+			if shouldRefresh {
+				if err := pm.refreshSymbols(); err != nil {
+					log.Printf("Failed to refresh symbols: %v", err)
+				}
+			}
 			pm.checkPrices()
 		}
 	}
@@ -89,10 +116,16 @@ func (pm *PriceMonitor) checkPrices() {
 	pm.mu.Lock()
 	pm.lastCheckTime = time.Now()
 	pm.checkCount++
+	symbols := pm.symbols
 	pm.mu.Unlock()
 
+	// Skip if no symbols to monitor
+	if len(symbols) == 0 {
+		return
+	}
+
 	// Fetch prices for all symbols
-	prices, err := pm.ticker.GetPrices(pm.cfg.MonitoredSymbols)
+	prices, err := pm.ticker.GetPrices(symbols)
 	if err != nil {
 		pm.mu.Lock()
 		pm.errorCount++
@@ -146,7 +179,8 @@ func (pm *PriceMonitor) GetStatus() map[string]interface{} {
 
 	status := make(map[string]interface{})
 	status["monitoring"] = true
-	status["monitored_symbols"] = pm.cfg.MonitoredSymbols
+	status["monitored_symbols"] = pm.symbols
+	status["last_symbols_fetch"] = pm.lastSymbolsFetch.Format(time.RFC3339)
 	status["price_check_interval_ms"] = pm.cfg.PriceCheckIntervalMs
 	status["check_count"] = pm.checkCount
 	status["error_count"] = pm.errorCount

@@ -16,6 +16,7 @@ type Config struct {
 	OrderAssuranceURL    string
 	SyncJobEnabled       bool
 	SyncJobCron          string
+	TradingFee           float64
 }
 
 func LoadConfig() *Config {
@@ -71,6 +72,14 @@ func LoadConfig() *Config {
 		syncCron = "0 * * * *" // Hourly default
 	}
 
+	tradingFeeStr := os.Getenv("TRADING_FEE")
+	tradingFee := 0.1 // Binance spot default: 0.1%
+	if tradingFeeStr != "" {
+		if parsed, err := strconv.ParseFloat(tradingFeeStr, 64); err == nil {
+			tradingFee = parsed
+		}
+	}
+
 	return &Config{
 		ServerPort:        serverPort,
 		DBHost:            dbHost,
@@ -82,5 +91,6 @@ func LoadConfig() *Config {
 		OrderAssuranceURL: orderAssuranceURL,
 		SyncJobEnabled:    syncEnabled,
 		SyncJobCron:       syncCron,
+		TradingFee:        tradingFee,
 	}
 }

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,19 +17,9 @@ import (
 	"github.com/grid-trading-bot/services/grid-trading/internal/service"
 	"github.com/joho/godotenv"
 	"github.com/robfig/cron/v3"
-	"github.com/shopspring/decimal"
 )
 
 func main() {
-	var (
-		initGrid = flag.Bool("init-grid", false, "Initialize grid levels")
-		symbol   = flag.String("symbol", "", "Trading symbol (e.g., ETH, BTC)")
-		minPrice = flag.String("min-price", "", "Minimum price for grid")
-		maxPrice = flag.String("max-price", "", "Maximum price for grid")
-		gridStep = flag.String("grid-step", "", "Price step between levels")
-		buyAmount = flag.String("buy-amount", "", "USDT amount per level")
-	)
-	flag.Parse()
 
 	if err := godotenv.Load(); err != nil {
 		log.Printf("No .env file found: %v", err)
@@ -73,43 +62,7 @@ func main() {
 	repo := repository.NewGridLevelRepository(db)
 	txRepo := repository.NewTransactionRepository(db)
 	assuranceClient := client.NewOrderAssuranceClient(cfg.OrderAssuranceURL)
-	gridService := service.NewGridService(repo, txRepo, assuranceClient)
-
-	if *initGrid {
-		if *symbol == "" || *minPrice == "" || *maxPrice == "" || *gridStep == "" || *buyAmount == "" {
-			log.Fatal("All parameters required for grid initialization: -symbol, -min-price, -max-price, -grid-step, -buy-amount")
-		}
-
-		minPriceDec, err := decimal.NewFromString(*minPrice)
-		if err != nil {
-			log.Fatal("Invalid min price:", err)
-		}
-
-		maxPriceDec, err := decimal.NewFromString(*maxPrice)
-		if err != nil {
-			log.Fatal("Invalid max price:", err)
-		}
-
-		gridStepDec, err := decimal.NewFromString(*gridStep)
-		if err != nil {
-			log.Fatal("Invalid grid step:", err)
-		}
-
-		buyAmountDec, err := decimal.NewFromString(*buyAmount)
-		if err != nil {
-			log.Fatal("Invalid buy amount:", err)
-		}
-
-		log.Printf("Initializing grid for %s: range %s-%s, step %s, amount %s USDT",
-			*symbol, *minPrice, *maxPrice, *gridStep, *buyAmount)
-
-		if err := gridService.InitializeGrid(*symbol, minPriceDec, maxPriceDec, gridStepDec, buyAmountDec); err != nil {
-			log.Fatal("Failed to initialize grid:", err)
-		}
-
-		log.Println("Grid initialization complete")
-		return
-	}
+	gridService := service.NewGridService(repo, txRepo, assuranceClient, cfg.TradingFee)
 
 	if cfg.SyncJobEnabled {
 		c := cron.New()

@@ -420,3 +420,29 @@ func (r *GridLevelRepository) GetAll() ([]*models.GridLevel, error) {
 	return levels, rows.Err()
 }
 
+// GetDistinctSymbols retrieves all unique symbols used in grid levels
+func (r *GridLevelRepository) GetDistinctSymbols() ([]string, error) {
+	query := `
+		SELECT DISTINCT symbol
+		FROM grid_levels
+		ORDER BY symbol
+	`
+
+	rows, err := r.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var symbols []string
+	for rows.Next() {
+		var symbol string
+		if err := rows.Scan(&symbol); err != nil {
+			return nil, err
+		}
+		symbols = append(symbols, symbol)
+	}
+
+	return symbols, rows.Err()
+}
+
