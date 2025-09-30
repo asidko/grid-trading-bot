@@ -16,6 +16,7 @@ import (
 type GridLevelRepositoryInterface interface {
 	// Query operations
 	GetAll() ([]*models.GridLevel, error)
+	GetByID(id int) (*models.GridLevel, error)
 	GetBySymbol(symbol string) ([]*models.GridLevel, error)
 	GetByBuyOrderID(orderID string) (*models.GridLevel, error)
 	GetBySellOrderID(orderID string) (*models.GridLevel, error)
@@ -259,6 +260,20 @@ func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount, f
 	}
 
 	log.Printf("Processed buy fill for level %d, filled amount: %s", level.ID, filledAmount)
+
+	// Immediately place sell order now that we're in HOLDING state
+	updatedLevel, err := s.repo.GetByID(level.ID)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch updated level %d for sell order: %v", level.ID, err)
+		return nil
+	}
+
+	if updatedLevel.State == models.StateHolding {
+		if err := s.tryPlaceSellOrder(updatedLevel); err != nil {
+			log.Printf("ERROR: Failed to place sell order for level %d: %v", level.ID, err)
+		}
+	}
+
 	return nil
 }
 
