@@ -67,8 +67,7 @@ func NewBinanceClient(apiKey, apiSecret string) *BinanceClient {
 // PlaceOrder places a LIMIT order on Binance
 func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price, quantity decimal.Decimal) (*models.BinanceOrder, error) {
 	// Ensure we have symbol info
-	symbolPair := bc.formatSymbol(symbol)
-	info, err := bc.getSymbolInfo(symbolPair)
+	info, err := bc.getSymbolInfo(symbol)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get symbol info: %w", err)
 	}
@@ -114,7 +113,7 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 	}
 
 	params := url.Values{}
-	params.Set("symbol", symbolPair)
+	params.Set("symbol", symbol)
 	params.Set("side", strings.ToUpper(string(side)))
 	params.Set("type", "LIMIT")
 	params.Set("timeInForce", "GTC")
@@ -188,7 +187,7 @@ func (bc *BinanceClient) GetOrder(symbol, orderID string) (*models.BinanceOrder,
 	}
 
 	params := url.Values{}
-	params.Set("symbol", bc.formatSymbol(symbol))
+	params.Set("symbol", symbol)
 	params.Set("orderId", orderID)
 	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	params.Set("recvWindow", "5000")
@@ -241,7 +240,7 @@ func (bc *BinanceClient) GetOpenOrders(symbol string) ([]*models.BinanceOrder, e
 
 	params := url.Values{}
 	if symbol != "" {
-		params.Set("symbol", bc.formatSymbol(symbol))
+		params.Set("symbol", symbol)
 	}
 	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 	params.Set("recvWindow", "5000")
@@ -292,13 +291,6 @@ func (bc *BinanceClient) sign(payload string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (bc *BinanceClient) formatSymbol(symbol string) string {
-	// Convert ETH to ETHUSDT, BTC to BTCUSDT, etc.
-	if !strings.HasSuffix(symbol, "USDT") {
-		return symbol + "USDT"
-	}
-	return symbol
-}
 
 // Cache management for idempotency
 
@@ -308,7 +300,7 @@ func (bc *BinanceClient) createCacheKey(symbol string, side models.OrderSide, pr
 	roundedQty := quantity.Div(tolerance).Round(0).Mul(tolerance)
 
 	return fmt.Sprintf("%s_%s_%s_%s",
-		bc.formatSymbol(symbol),
+		symbol,
 		side,
 		price.String(),
 		roundedQty.String(),

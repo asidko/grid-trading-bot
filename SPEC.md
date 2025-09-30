@@ -26,7 +26,7 @@ Each grid level represents a complete buy-sell cycle with both buy and sell pric
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | integer | Primary key, auto-increment |
-| `symbol` | string | Trading symbol (e.g., 'ETH', 'BTC') - USDT appended internally |
+| `symbol` | string | Trading symbol (e.g., 'ETHUSDT', 'BTCUSDT') |
 | `buy_price` | decimal(16,8) | Price to place buy order (e.g., 3600.00000000) |
 | `sell_price` | decimal(16,8) | Price to place sell order (e.g., 3800.00000000) |
 | `buy_amount` | decimal(16,8) | USDT amount to buy with (e.g., 1000.00000000) |
@@ -127,8 +127,8 @@ Base URL: `ORDER_ASSURANCE_URL` environment variable
 POST /order-assurance
 // Always places LIMIT orders at specified price
 // IMPORTANT: Idempotent based on (symbol, price, side, amount) with 0.01% tolerance
-// Buy request:  {symbol: "ETH", price: 3600, side: "buy", amount: 1000}  // amount in USDT
-// Sell request: {symbol: "ETH", price: 3800, side: "sell", amount: 0.294} // amount in ETH
+// Buy request:  {symbol: "ETHUSDT", price: 3600, side: "buy", amount: 1000}  // amount in USDT
+// Sell request: {symbol: "ETHUSDT", price: 3800, side: "sell", amount: 0.294} // amount in ETH
 Response: {order_id: "exchange_123", status: "assured"} // assured = limit order placed on exchange
 // Idempotency: Returns same order_id if amount within 0.01% of existing order
 // Example: 1000.00 and 1000.09 USDT considered same (0.009% difference)
@@ -150,7 +150,7 @@ Response: {order_id, status: "open|filled|cancelled", filled_amount, fill_price}
 **Price Trigger:**
 ```
 POST /trigger-for-price
-Body: {symbol: "ETH", price: 3753}
+Body: {symbol: "ETHUSDT", price: 3753}
 ```
 
 **Fill Notification:**
@@ -171,7 +171,7 @@ Finds level by order_id, sets state to ERROR and stores error message in `error_
 **Initialize Grid:**
 ```
 init-grid-levels(symbol, min_price, max_price, grid_step, buy_amount)
-// Example: init-grid-levels('ETH', 2000, 4000, 200, 1000)
+// Example: init-grid-levels('ETHUSDT', 2000, 4000, 200, 1000)
 // Creates grid levels with buy_price and sell_price pairs:
 // Level 1: buy_price=2000, sell_price=2200
 // Level 2: buy_price=2200, sell_price=2400

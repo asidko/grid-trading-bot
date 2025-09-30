@@ -86,7 +86,7 @@ docker-compose down
 |----------|-------------|---------|
 | `BINANCE_API_KEY` | Binance API key | *required* |
 | `BINANCE_API_SECRET` | Binance API secret | *required* |
-| `MONITORED_SYMBOLS` | Symbols to trade | ETH,BTC,BNB |
+| `MONITORED_SYMBOLS` | Symbols to trade | ETHUSDT,BTCUSDT,BNBUSDT |
 | `PRICE_CHECK_INTERVAL_MS` | Price check frequency | 10000 (10s) |
 | `TRIGGER_INTERVAL_MS` | Min time between triggers | 5000 (5s) |
 | `MIN_PRICE_CHANGE_PCT` | Min price change to trigger | 0.01 (0.01%) |

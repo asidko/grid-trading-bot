@@ -37,18 +37,14 @@ func NewBinanceTicker() *BinanceTicker {
 
 // GetPrices fetches current prices for multiple symbols
 func (bt *BinanceTicker) GetPrices(symbols []string) (map[string]decimal.Decimal, error) {
-	// Build symbols array with USDT suffix
-	symbolsWithUSDT := make([]string, len(symbols))
+	// Normalize symbols to uppercase
+	normalizedSymbols := make([]string, len(symbols))
 	for i, symbol := range symbols {
-		if !strings.HasSuffix(strings.ToUpper(symbol), "USDT") {
-			symbolsWithUSDT[i] = strings.ToUpper(symbol) + "USDT"
-		} else {
-			symbolsWithUSDT[i] = strings.ToUpper(symbol)
-		}
+		normalizedSymbols[i] = strings.ToUpper(symbol)
 	}
 
 	// Use json.Marshal for proper JSON encoding
-	symbolsJSON, err := json.Marshal(symbolsWithUSDT)
+	symbolsJSON, err := json.Marshal(normalizedSymbols)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal symbols: %w", err)
 	}
@@ -98,9 +94,7 @@ func (bt *BinanceTicker) GetPrices(symbols []string) (map[string]decimal.Decimal
 			continue
 		}
 
-		// Remove USDT suffix for consistency
-		symbol := strings.TrimSuffix(ticker.Symbol, "USDT")
-		result[symbol] = price
+		result[ticker.Symbol] = price
 	}
 
 	return result, nil
