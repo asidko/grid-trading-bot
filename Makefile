@@ -1,4 +1,4 @@
-.PHONY: init levels up down logs clean build test
+.PHONY: init levels calc up down logs clean build test
 
 init:
 	@echo "Setting up grid trading bot..."
@@ -61,3 +61,17 @@ levels:
 		-d "{\"symbol\":\"$$symbol\",\"min_price\":$$min_price,\"max_price\":$$max_price,\"grid_step\":$$grid_step,\"buy_amount\":$$buy_amount}" \
 		&& echo "  ✓ Grid levels created successfully" \
 		|| echo "  ✗ Failed to create grid levels"
+
+calc:
+	@read -p "Buy price [3500]: " buy; \
+	read -p "Sell price [3700]: " sell; \
+	read -p "Buy amount USDT [1000]: " amount; \
+	buy=$${buy:-3500}; sell=$${sell:-3700}; amount=$${amount:-1000}; fee=0.1; \
+	step=$$(printf "%.6f" $$(echo "$$sell - $$buy" | bc -l) | sed 's/0*$$//;s/\.$$//'); \
+	buy_cost=$$(echo "$$amount * (1 + $$fee/100)" | bc -l); \
+	coin=$$(echo "$$amount / $$buy" | bc -l); \
+	sell_rev=$$(echo "$$coin * $$sell" | bc -l); \
+	sell_net=$$(echo "$$sell_rev * (1 - $$fee/100)" | bc -l); \
+	profit=$$(echo "$$sell_net - $$buy_cost" | bc -l); \
+	pct=$$(echo "$$profit / $$buy_cost * 100" | bc -l); \
+	printf "\nStep: %s | Profit: %.2f USDT (%.2f%%)\n\n" $$step $$profit $$pct
