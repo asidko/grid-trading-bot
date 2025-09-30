@@ -23,6 +23,13 @@ More: **[IDEA.md](IDEA.md)** - Strategy concept
 - Binance account with [API keys](https://www.binance.com/en/my/settings/api-management)
 - USDT in Binance Spot account
 
+### Clone the project
+
+```
+git clone git@github.com:asidko/grid-trading-bot.git
+cd grid-trading-bot
+```
+
 ### Initialize Configuration
 
 ```bash

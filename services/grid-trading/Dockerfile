@@ -8,7 +8,6 @@ RUN go mod download
 
 # Copy source code
 COPY services/grid-trading/ ./services/grid-trading/
-COPY pkg/ ./pkg/
 
 # Build the application
 RUN go build -o grid-trading ./services/grid-trading/cmd/main.go
