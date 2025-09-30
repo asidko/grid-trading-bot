@@ -44,7 +44,7 @@ type GridLevelRepositoryInterface interface {
 // OrderAssuranceInterface defines the interface for order assurance client operations
 type OrderAssuranceInterface interface {
 	PlaceOrder(req client.OrderRequest) (*client.OrderResponse, error)
-	GetOrderStatus(orderID string) (*client.OrderStatus, error)
+	GetOrderStatus(symbol, orderID string) (*client.OrderStatus, error)
 }
 
 // TransactionRepositoryInterface defines the interface for transaction repository operations
@@ -423,7 +423,7 @@ func (s *GridService) SyncOrders() error {
 }
 
 func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID string, isBuy bool) {
-	status, err := s.assurance.GetOrderStatus(orderID)
+	status, err := s.assurance.GetOrderStatus(level.Symbol, orderID)
 	if err != nil {
 		log.Printf("Failed to get order status for %s: %v", orderID, err)
 		return
@@ -441,10 +441,15 @@ func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID
 
 	switch status.Status {
 	case "filled":
-		if isBuy && status.FilledAmount != nil {
-			s.repo.ProcessBuyFill(level.ID, *status.FilledAmount)
-		} else if !isBuy {
-			s.repo.ProcessSellFill(level.ID)
+		if status.FilledAmount == nil || status.FillPrice == nil {
+			return
+		}
+
+		// Reuse the existing notification handler logic (they check state internally)
+		if isBuy {
+			s.ProcessBuyFillNotification(orderID, *status.FilledAmount, *status.FillPrice)
+		} else {
+			s.ProcessSellFillNotification(orderID, *status.FilledAmount, *status.FillPrice)
 		}
 	case "cancelled":
 		log.Printf("Order %s cancelled, resetting level %d", orderID, level.ID)

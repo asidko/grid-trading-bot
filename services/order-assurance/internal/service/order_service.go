@@ -48,15 +48,8 @@ func (s *OrderService) PlaceOrder(req models.OrderRequest) (*models.OrderRespons
 }
 
 // GetOrderStatus retrieves current order status from Binance
-func (s *OrderService) GetOrderStatus(orderID string) (*models.OrderStatus, error) {
-	// Try common trading symbols
-	for _, sym := range []string{"ETH", "BTC", "BNB", "SOL", "DOGE"} {
-		status, err := s.fetchOrderStatus(sym, orderID)
-		if err == nil && status != nil {
-			return status, nil
-		}
-	}
-	return nil, fmt.Errorf("order not found")
+func (s *OrderService) GetOrderStatus(symbol, orderID string) (*models.OrderStatus, error) {
+	return s.fetchOrderStatus(symbol, orderID)
 }
 
 func (s *OrderService) fetchOrderStatus(symbol, orderID string) (*models.OrderStatus, error) {

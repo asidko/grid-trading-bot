@@ -90,13 +90,19 @@ func (h *Handlers) handlePlaceOrder(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) handleGetOrderStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	orderID := vars["order_id"]
+	symbol := r.URL.Query().Get("symbol")
 
 	if orderID == "" {
 		http.Error(w, "Order ID is required", http.StatusBadRequest)
 		return
 	}
 
-	status, err := h.orderService.GetOrderStatus(orderID)
+	if symbol == "" {
+		http.Error(w, "Symbol is required", http.StatusBadRequest)
+		return
+	}
+
+	status, err := h.orderService.GetOrderStatus(symbol, orderID)
 	if err != nil {
 		log.Printf("Error getting order status: %v", err)
 		http.Error(w, "Failed to get order status", http.StatusInternalServerError)

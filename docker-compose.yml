@@ -13,7 +13,7 @@ services:
       DB_PATH: ${DB_PATH}
       ORDER_ASSURANCE_URL: ${ORDER_ASSURANCE_URL}
       SYNC_JOB_ENABLED: ${SYNC_JOB_ENABLED}
-      SYNC_JOB_CRON: ${SYNC_JOB_CRON}
+      SYNC_JOB_CRON: "0 * * * *"
       TRADING_FEE: ${TRADING_FEE}
     depends_on:
       - order-assurance

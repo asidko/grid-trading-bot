@@ -186,6 +186,7 @@ func (bc *BinanceClient) GetOrder(symbol, orderID string) (*models.BinanceOrder,
 		return nil, fmt.Errorf("Binance API credentials not configured - cannot get order status")
 	}
 
+	// Try querying single order first (fast, but may not find old orders)
 	params := url.Values{}
 	params.Set("symbol", symbol)
 	params.Set("orderId", orderID)
@@ -208,9 +209,61 @@ func (bc *BinanceClient) GetOrder(symbol, orderID string) (*models.BinanceOrder,
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, nil
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
+
+	// If found, return it
+	if resp.StatusCode == http.StatusOK {
+		var order models.BinanceOrder
+		if err := json.Unmarshal(body, &order); err != nil {
+			return nil, err
+		}
+		return &order, nil
+	}
+
+	// If not found, fallback to allOrders (searches recent 7 days)
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusBadRequest {
+		log.Printf("Order %s not found in /api/v3/order, trying /api/v3/allOrders", orderID)
+		return bc.getOrderFromAllOrders(symbol, orderID)
+	}
+
+	// Other error
+	var errResp map[string]interface{}
+	json.Unmarshal(body, &errResp)
+	return nil, fmt.Errorf("binance error %d: %v", resp.StatusCode, errResp)
+}
+
+func (bc *BinanceClient) getOrderFromAllOrders(symbol, orderID string) (*models.BinanceOrder, error) {
+	// Parse orderID to int64
+	targetOrderID, err := strconv.ParseInt(orderID, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid order ID: %w", err)
+	}
+
+	// Query recent orders (last 7 days)
+	params := url.Values{}
+	params.Set("symbol", symbol)
+	params.Set("limit", "500") // Max 500 orders
+	params.Set("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	params.Set("recvWindow", "5000")
+
+	signature := bc.sign(params.Encode())
+	params.Set("signature", signature)
+
+	req, err := http.NewRequest("GET", bc.baseURL+"/api/v3/allOrders?"+params.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("X-MBX-APIKEY", bc.apiKey)
+
+	resp, err := bc.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -223,12 +276,19 @@ func (bc *BinanceClient) GetOrder(symbol, orderID string) (*models.BinanceOrder,
 		return nil, fmt.Errorf("binance error %d: %v", resp.StatusCode, errResp)
 	}
 
-	var order models.BinanceOrder
-	if err := json.Unmarshal(body, &order); err != nil {
+	var orders []models.BinanceOrder
+	if err := json.Unmarshal(body, &orders); err != nil {
 		return nil, err
 	}
 
-	return &order, nil
+	// Find order with matching ID
+	for i := range orders {
+		if orders[i].OrderID == targetOrderID {
+			return &orders[i], nil
+		}
+	}
+
+	return nil, nil
 }
 
 // GetOpenOrders retrieves all open orders for a symbol

@@ -96,8 +96,8 @@ func (c *OrderAssuranceClient) PlaceOrder(req OrderRequest) (*OrderResponse, err
 	return &orderResp, nil
 }
 
-func (c *OrderAssuranceClient) GetOrderStatus(orderID string) (*OrderStatus, error) {
-	url := fmt.Sprintf("%s/order-status/%s", c.baseURL, orderID)
+func (c *OrderAssuranceClient) GetOrderStatus(symbol, orderID string) (*OrderStatus, error) {
+	url := fmt.Sprintf("%s/order-status/%s?symbol=%s", c.baseURL, orderID, symbol)
 
 	resp, err := c.httpClient.Get(url)
 	if err != nil {
