@@ -108,6 +108,16 @@ func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) 
 		return fmt.Errorf("failed to get levels for symbol %s: %w", symbol, err)
 	}
 
+	// Check active orders first to process any fills
+	for _, level := range levels {
+		if level.State == models.StateBuyActive && level.BuyOrderID.Valid {
+			s.checkAndUpdateOrderStatus(level, level.BuyOrderID.String, true)
+		} else if level.State == models.StateSellActive && level.SellOrderID.Valid {
+			s.checkAndUpdateOrderStatus(level, level.SellOrderID.String, false)
+		}
+	}
+
+	// Place new orders based on price triggers
 	activatedCount := 0
 	for _, level := range levels {
 		if level.CanPlaceBuy(price) {
