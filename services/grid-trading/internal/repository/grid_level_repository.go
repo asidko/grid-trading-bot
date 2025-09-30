@@ -263,7 +263,7 @@ func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decima
 
 	query := `
 		UPDATE grid_levels
-		SET state = $1, filled_amount = $2, buy_order_id = NULL,
+		SET state = $1, filled_amount = $2,
 		    state_changed_at = datetime('now'), updated_at = datetime('now')
 		WHERE id = $3 AND state = $4
 	`
