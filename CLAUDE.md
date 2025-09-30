@@ -13,22 +13,32 @@ READY → PLACING_BUY → BUY_ACTIVE → HOLDING → PLACING_SELL → SELL_ACTIV
 - **Sell trigger:** `price < sell_price` AND `state = HOLDING` (⚠️ BUG: code uses `>=`)
 - Each grid level is independent buy-sell cycle with its own state
 
-## Database
-Table: `grid_levels` - Unique on `(symbol, buy_price, sell_price)`, Check: `sell_price > buy_price`
+## Database Tables
+- **grid_levels**: State machine (mutable), Unique on `(symbol, buy_price, sell_price)`
+- **transactions**: Audit log (immutable), Records all fills and errors
 
 ## Key Files
 - `services/grid-trading/internal/service/grid_service.go` - Core trading logic
 - `services/grid-trading/internal/models/grid_level.go` - State machine & triggers
+- `services/grid-trading/internal/repository/transaction_repository.go` - Transaction recording
 - `services/order-assurance/internal/exchange/binance_client.go` - Binance integration
 
-## Flow
+## Data Flow
 1. price-monitor polls Binance → sends trigger to grid-trading
 2. grid-trading checks levels → calls order-assurance → updates state
 3. order-assurance places order on Binance → sends fill notification back
-4. grid-trading processes fill → updates state (HOLDING or READY)
+4. grid-trading processes fill → updates state + records transaction
 
-## Key Principles
-- Reactive: Orders placed only on price triggers (not proactive)
-- Idempotent: Order placement cached with 0.01% tolerance
-- No cache: Always read state from DB
-- Recovery: Hourly sync job for stuck states
+## Design Principles
+- **Reactive**: Orders placed only on price triggers (not proactive)
+- **Idempotent**: Order placement cached with 0.01% tolerance
+- **No cache**: Always read state from DB
+- **Audit trail**: All trades/errors in transactions table
+- **Simple types**: Use int/decimal with zero values, not sql.Null*
+- **Division safety**: Always check > 0 before division
+- **Actual costs**: Use transaction history for profit calc, not recalculated values
+
+## Development Rules
+- **Schema changes**: Update migration files directly, no graceful altering (data wiped before testing)
+- **Error tracking**: Record errors in transactions table, not grid_levels state
+- **Transaction recording**: INSERT only, never UPDATE - immutable audit log

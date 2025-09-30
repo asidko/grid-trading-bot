@@ -100,9 +100,9 @@ func (h *Handlers) handleFillNotification(w http.ResponseWriter, r *http.Request
 
 	var err error
 	if req.Side == "buy" {
-		err = h.gridService.ProcessBuyFillNotification(req.OrderID, req.FilledAmount)
+		err = h.gridService.ProcessBuyFillNotification(req.OrderID, req.FilledAmount, req.FillPrice)
 	} else if req.Side == "sell" {
-		err = h.gridService.ProcessSellFillNotification(req.OrderID)
+		err = h.gridService.ProcessSellFillNotification(req.OrderID, req.FilledAmount, req.FillPrice)
 	} else {
 		http.Error(w, "Invalid side", http.StatusBadRequest)
 		return

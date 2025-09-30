@@ -53,18 +53,27 @@ func main() {
 	}
 	defer db.Close()
 
-	migrationSQL, err := os.ReadFile("services/grid-trading/migrations/001_create_grid_levels.sql")
-	if err != nil {
-		log.Fatal("Failed to read migration file:", err)
+	// Run migrations
+	migrations := []string{
+		"services/grid-trading/migrations/001_create_grid_levels.sql",
+		"services/grid-trading/migrations/002_create_transactions.sql",
 	}
 
-	if err := database.RunMigrations(db, string(migrationSQL)); err != nil {
-		log.Fatal("Failed to run migrations:", err)
+	for _, migrationFile := range migrations {
+		migrationSQL, err := os.ReadFile(migrationFile)
+		if err != nil {
+			log.Fatalf("Failed to read migration file %s: %v", migrationFile, err)
+		}
+
+		if err := database.RunMigrations(db, string(migrationSQL)); err != nil {
+			log.Fatalf("Failed to run migration %s: %v", migrationFile, err)
+		}
 	}
 
 	repo := repository.NewGridLevelRepository(db)
+	txRepo := repository.NewTransactionRepository(db)
 	assuranceClient := client.NewOrderAssuranceClient(cfg.OrderAssuranceURL)
-	gridService := service.NewGridService(repo, assuranceClient)
+	gridService := service.NewGridService(repo, txRepo, assuranceClient)
 
 	if *initGrid {
 		if *symbol == "" || *minPrice == "" || *maxPrice == "" || *gridStep == "" || *buyAmount == "" {

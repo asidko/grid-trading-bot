@@ -24,7 +24,7 @@ type GridLevelRepositoryInterface interface {
 	// State management operations
 	TryStartBuyOrder(id int) (bool, error)
 	TryStartSellOrder(id int) (bool, error)
-	UpdateState(id int, state models.GridState, errorMsg *string) error
+	UpdateState(id int, state models.GridState) error
 
 	// Order tracking operations
 	UpdateBuyOrderPlaced(id int, orderID string) error
@@ -44,16 +44,27 @@ type OrderAssuranceInterface interface {
 	GetOrderStatus(orderID string) (*client.OrderStatus, error)
 }
 
+// TransactionRepositoryInterface defines the interface for transaction repository operations
+type TransactionRepositoryInterface interface {
+	RecordBuyFilled(gridLevelID int, symbol string, orderID string, targetPrice, executedPrice, amountCoin, amountUSDT decimal.Decimal) error
+	RecordSellFilled(gridLevelID int, symbol string, orderID string, targetPrice, executedPrice, amountCoin, amountUSDT decimal.Decimal, relatedBuyID int, profitUSDT, profitPct decimal.Decimal) error
+	RecordBuyError(gridLevelID int, symbol string, targetPrice decimal.Decimal, errorCode, errorMsg string) error
+	RecordSellError(gridLevelID int, symbol string, targetPrice decimal.Decimal, errorCode, errorMsg string) error
+	GetLastBuyForLevel(gridLevelID int) (*models.Transaction, error)
+}
+
 type GridService struct {
-	repo      GridLevelRepositoryInterface
-	assurance OrderAssuranceInterface
+	repo       GridLevelRepositoryInterface
+	txRepo     TransactionRepositoryInterface
+	assurance  OrderAssuranceInterface
 }
 
 // NewGridService creates a new GridService
 // Accepts both concrete types and interfaces (Go's interface satisfaction is implicit)
-func NewGridService(repo GridLevelRepositoryInterface, assurance OrderAssuranceInterface) *GridService {
+func NewGridService(repo GridLevelRepositoryInterface, txRepo TransactionRepositoryInterface, assurance OrderAssuranceInterface) *GridService {
 	return &GridService{
 		repo:      repo,
+		txRepo:    txRepo,
 		assurance: assurance,
 	}
 }
@@ -123,8 +134,8 @@ func (s *GridService) tryPlaceBuyOrder(level *models.GridLevel) error {
 	orderResp, err := s.assurance.PlaceOrder(orderReq)
 	if err != nil {
 		log.Printf("ERROR: Buy order placement failed for level %d: %v", level.ID, err)
-		errMsg := fmt.Sprintf("BUY order failed at %s: %v", level.BuyPrice, err)
-		s.repo.UpdateState(level.ID, models.StateReady, &errMsg)
+		s.repo.UpdateState(level.ID, models.StateReady)
+		s.txRepo.RecordBuyError(level.ID, level.Symbol, level.BuyPrice, "order_placement_failed", err.Error())
 		return fmt.Errorf("failed to place buy order: %w", err)
 	}
 
@@ -148,7 +159,7 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 	}
 
 	if !level.FilledAmount.Valid {
-		s.repo.UpdateState(level.ID, models.StateHolding, nil)
+		s.repo.UpdateState(level.ID, models.StateHolding)
 		return fmt.Errorf("no filled amount for level %d", level.ID)
 	}
 
@@ -165,8 +176,8 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 	orderResp, err := s.assurance.PlaceOrder(orderReq)
 	if err != nil {
 		log.Printf("ERROR: Sell order placement failed for level %d: %v", level.ID, err)
-		errMsg := fmt.Sprintf("SELL order failed at %s: %v", level.SellPrice, err)
-		s.repo.UpdateState(level.ID, models.StateHolding, &errMsg)
+		s.repo.UpdateState(level.ID, models.StateHolding)
+		s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "order_placement_failed", err.Error())
 		return fmt.Errorf("failed to place sell order: %w", err)
 	}
 
@@ -178,7 +189,7 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 	return nil
 }
 
-func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount decimal.Decimal) error {
+func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount, fillPrice decimal.Decimal) error {
 	level, err := s.repo.GetByBuyOrderID(orderID)
 	if err != nil {
 		return fmt.Errorf("failed to get level by buy order ID: %w", err)
@@ -198,11 +209,17 @@ func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount de
 		return fmt.Errorf("failed to process buy fill: %w", err)
 	}
 
+	// Record transaction
+	amountUSDT := filledAmount.Mul(fillPrice)
+	if err := s.txRepo.RecordBuyFilled(level.ID, level.Symbol, orderID, level.BuyPrice, fillPrice, filledAmount, amountUSDT); err != nil {
+		log.Printf("ERROR: Failed to record buy transaction for level %d: %v", level.ID, err)
+	}
+
 	log.Printf("Processed buy fill for level %d, filled amount: %s", level.ID, filledAmount)
 	return nil
 }
 
-func (s *GridService) ProcessSellFillNotification(orderID string) error {
+func (s *GridService) ProcessSellFillNotification(orderID string, filledAmount, fillPrice decimal.Decimal) error {
 	level, err := s.repo.GetBySellOrderID(orderID)
 	if err != nil {
 		return fmt.Errorf("failed to get level by sell order ID: %w", err)
@@ -218,11 +235,36 @@ func (s *GridService) ProcessSellFillNotification(orderID string) error {
 		return nil
 	}
 
+	// Get the last buy transaction to calculate profit
+	buyTx, err := s.txRepo.GetLastBuyForLevel(level.ID)
+	if err != nil {
+		log.Printf("ERROR: Failed to get last buy transaction for level %d: %v", level.ID, err)
+	}
+	if buyTx == nil {
+		log.Printf("WARNING: No buy transaction found for level %d - cannot calculate profit", level.ID)
+	}
+
 	if err := s.repo.ProcessSellFill(level.ID); err != nil {
 		return fmt.Errorf("failed to process sell fill: %w", err)
 	}
 
-	log.Printf("Processed sell fill for level %d, cycle complete", level.ID)
+	// Record transaction with profit
+	sellAmountUSDT := filledAmount.Mul(fillPrice)
+	var relatedBuyID int
+	var profitUSDT, profitPct decimal.Decimal
+
+	if buyTx != nil && buyTx.AmountUSDT.Valid && buyTx.AmountUSDT.Decimal.GreaterThan(decimal.Zero) {
+		relatedBuyID = buyTx.ID
+		profitUSDT = sellAmountUSDT.Sub(buyTx.AmountUSDT.Decimal)
+		profitPct = profitUSDT.Div(buyTx.AmountUSDT.Decimal).Mul(decimal.NewFromInt(100))
+		log.Printf("Processed sell fill for level %d, cycle complete. Profit: %s USDT (%s%%)", level.ID, profitUSDT, profitPct)
+	} else {
+		log.Printf("Processed sell fill for level %d, cycle complete. Profit: N/A (no buy transaction)", level.ID)
+	}
+
+	if err := s.txRepo.RecordSellFilled(level.ID, level.Symbol, orderID, level.SellPrice, fillPrice, filledAmount, sellAmountUSDT, relatedBuyID, profitUSDT, profitPct); err != nil {
+		log.Printf("ERROR: Failed to record sell transaction for level %d: %v", level.ID, err)
+	}
 	return nil
 }
 
@@ -247,8 +289,15 @@ func (s *GridService) ProcessErrorNotification(orderID string, side string, erro
 		return nil
 	}
 
-	if err := s.repo.UpdateState(level.ID, models.StateError, &errorMsg); err != nil {
+	if err := s.repo.UpdateState(level.ID, models.StateError); err != nil {
 		return fmt.Errorf("failed to update state to ERROR: %w", err)
+	}
+
+	// Record error transaction
+	if side == "buy" {
+		s.txRepo.RecordBuyError(level.ID, level.Symbol, level.BuyPrice, "order_error", errorMsg)
+	} else {
+		s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "order_error", errorMsg)
 	}
 
 	log.Printf("Level %d set to ERROR state: %s", level.ID, errorMsg)
@@ -309,7 +358,7 @@ func (s *GridService) SyncOrders() error {
 					s.repo.UpdateBuyOrderPlaced(level.ID, orderResp.OrderID)
 					log.Printf("Recovered buy order %s for level %d", orderResp.OrderID, level.ID)
 				} else {
-					s.repo.UpdateState(level.ID, models.StateReady, nil)
+					s.repo.UpdateState(level.ID, models.StateReady)
 					log.Printf("Failed to recover buy order for level %d: %v", level.ID, err)
 				}
 			}
@@ -328,11 +377,11 @@ func (s *GridService) SyncOrders() error {
 					s.repo.UpdateSellOrderPlaced(level.ID, orderResp.OrderID)
 					log.Printf("Recovered sell order %s for level %d", orderResp.OrderID, level.ID)
 				} else {
-					s.repo.UpdateState(level.ID, models.StateHolding, nil)
+					s.repo.UpdateState(level.ID, models.StateHolding)
 					log.Printf("Failed to recover sell order for level %d: %v", level.ID, err)
 				}
 			} else {
-				s.repo.UpdateState(level.ID, models.StateHolding, nil)
+				s.repo.UpdateState(level.ID, models.StateHolding)
 			}
 		}
 	}
@@ -363,9 +412,9 @@ func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID
 	if status == nil {
 		log.Printf("Order %s not found, resetting level %d", orderID, level.ID)
 		if isBuy {
-			s.repo.UpdateState(level.ID, models.StateReady, nil)
+			s.repo.UpdateState(level.ID, models.StateReady)
 		} else {
-			s.repo.UpdateState(level.ID, models.StateHolding, nil)
+			s.repo.UpdateState(level.ID, models.StateHolding)
 		}
 		return
 	}
@@ -380,9 +429,9 @@ func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID
 	case "cancelled":
 		log.Printf("Order %s cancelled, resetting level %d", orderID, level.ID)
 		if isBuy {
-			s.repo.UpdateState(level.ID, models.StateReady, nil)
+			s.repo.UpdateState(level.ID, models.StateReady)
 		} else {
-			s.repo.UpdateState(level.ID, models.StateHolding, nil)
+			s.repo.UpdateState(level.ID, models.StateHolding)
 		}
 	}
 }

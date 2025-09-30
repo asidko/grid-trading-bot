@@ -30,7 +30,6 @@ type GridLevel struct {
 	BuyOrderID     sql.NullString       `db:"buy_order_id"`
 	SellOrderID    sql.NullString       `db:"sell_order_id"`
 	Enabled        bool                 `db:"enabled"`
-	ErrorMsg       sql.NullString       `db:"error_msg"`
 	StateChangedAt time.Time            `db:"state_changed_at"`
 	CreatedAt      time.Time            `db:"created_at"`
 	UpdatedAt      time.Time            `db:"updated_at"`

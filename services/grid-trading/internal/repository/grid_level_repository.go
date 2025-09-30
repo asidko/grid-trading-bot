@@ -23,7 +23,7 @@ func (r *GridLevelRepository) scanLevel(scanner interface{ Scan(...interface{}) 
 		&level.ID, &level.Symbol, &level.BuyPrice, &level.SellPrice,
 		&level.BuyAmount, &level.FilledAmount, &level.State,
 		&level.BuyOrderID, &level.SellOrderID, &level.Enabled,
-		&level.ErrorMsg, &level.StateChangedAt, &level.CreatedAt, &level.UpdatedAt,
+		&level.StateChangedAt, &level.CreatedAt, &level.UpdatedAt,
 	)
 	return level, err
 }
@@ -31,7 +31,7 @@ func (r *GridLevelRepository) scanLevel(scanner interface{ Scan(...interface{}) 
 func (r *GridLevelRepository) GetBySymbol(symbol string) ([]*models.GridLevel, error) {
 	query := `
 		SELECT id, symbol, buy_price, sell_price, buy_amount, filled_amount,
-		       state, buy_order_id, sell_order_id, enabled, error_msg,
+		       state, buy_order_id, sell_order_id, enabled,
 		       state_changed_at, created_at, updated_at
 		FROM grid_levels
 		WHERE symbol = $1
@@ -59,7 +59,7 @@ func (r *GridLevelRepository) GetBySymbol(symbol string) ([]*models.GridLevel, e
 func (r *GridLevelRepository) GetByID(id int) (*models.GridLevel, error) {
 	query := `
 		SELECT id, symbol, buy_price, sell_price, buy_amount, filled_amount,
-		       state, buy_order_id, sell_order_id, enabled, error_msg,
+		       state, buy_order_id, sell_order_id, enabled,
 		       state_changed_at, created_at, updated_at
 		FROM grid_levels
 		WHERE id = $1
@@ -76,7 +76,7 @@ func (r *GridLevelRepository) GetByID(id int) (*models.GridLevel, error) {
 func (r *GridLevelRepository) GetByBuyOrderID(orderID string) (*models.GridLevel, error) {
 	query := `
 		SELECT id, symbol, buy_price, sell_price, buy_amount, filled_amount,
-		       state, buy_order_id, sell_order_id, enabled, error_msg,
+		       state, buy_order_id, sell_order_id, enabled,
 		       state_changed_at, created_at, updated_at
 		FROM grid_levels
 		WHERE buy_order_id = $1
@@ -93,7 +93,7 @@ func (r *GridLevelRepository) GetByBuyOrderID(orderID string) (*models.GridLevel
 func (r *GridLevelRepository) GetBySellOrderID(orderID string) (*models.GridLevel, error) {
 	query := `
 		SELECT id, symbol, buy_price, sell_price, buy_amount, filled_amount,
-		       state, buy_order_id, sell_order_id, enabled, error_msg,
+		       state, buy_order_id, sell_order_id, enabled,
 		       state_changed_at, created_at, updated_at
 		FROM grid_levels
 		WHERE sell_order_id = $1
@@ -111,7 +111,7 @@ func (r *GridLevelRepository) GetStuckInPlacingState(timeout time.Duration) ([]*
 	cutoff := time.Now().Add(-timeout)
 	query := `
 		SELECT id, symbol, buy_price, sell_price, buy_amount, filled_amount,
-		       state, buy_order_id, sell_order_id, enabled, error_msg,
+		       state, buy_order_id, sell_order_id, enabled,
 		       state_changed_at, created_at, updated_at
 		FROM grid_levels
 		WHERE state IN ('PLACING_BUY', 'PLACING_SELL')
@@ -139,7 +139,7 @@ func (r *GridLevelRepository) GetStuckInPlacingState(timeout time.Duration) ([]*
 func (r *GridLevelRepository) GetAllActive() ([]*models.GridLevel, error) {
 	query := `
 		SELECT id, symbol, buy_price, sell_price, buy_amount, filled_amount,
-		       state, buy_order_id, sell_order_id, enabled, error_msg,
+		       state, buy_order_id, sell_order_id, enabled,
 		       state_changed_at, created_at, updated_at
 		FROM grid_levels
 		WHERE state IN ('BUY_ACTIVE', 'SELL_ACTIVE')
@@ -163,7 +163,7 @@ func (r *GridLevelRepository) GetAllActive() ([]*models.GridLevel, error) {
 	return levels, rows.Err()
 }
 
-func (r *GridLevelRepository) UpdateState(id int, state models.GridState, errorMsg *string) error {
+func (r *GridLevelRepository) UpdateState(id int, state models.GridState) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return err
@@ -172,11 +172,11 @@ func (r *GridLevelRepository) UpdateState(id int, state models.GridState, errorM
 
 	query := `
 		UPDATE grid_levels
-		SET state = $1, error_msg = $2, state_changed_at = NOW(), updated_at = NOW()
-		WHERE id = $3
+		SET state = $1, state_changed_at = NOW(), updated_at = NOW()
+		WHERE id = $2
 	`
 
-	_, err = tx.Exec(query, state, errorMsg, id)
+	_, err = tx.Exec(query, state, id)
 	if err != nil {
 		return err
 	}
@@ -396,7 +396,7 @@ func (r *GridLevelRepository) Create(level *models.GridLevel) error {
 func (r *GridLevelRepository) GetAll() ([]*models.GridLevel, error) {
 	query := `
 		SELECT id, symbol, buy_price, sell_price, buy_amount, filled_amount,
-		       state, buy_order_id, sell_order_id, enabled, error_msg,
+		       state, buy_order_id, sell_order_id, enabled,
 		       state_changed_at, created_at, updated_at
 		FROM grid_levels
 		ORDER BY symbol, buy_price ASC

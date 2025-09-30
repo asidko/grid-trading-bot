@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS grid_levels (
     buy_order_id VARCHAR(100),
     sell_order_id VARCHAR(100),
     enabled BOOLEAN DEFAULT true,
-    error_msg TEXT,
     state_changed_at TIMESTAMP NOT NULL DEFAULT NOW(),
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
