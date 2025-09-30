@@ -1,4 +1,4 @@
-.PHONY: init levels calc status up down logs clean build test
+.PHONY: init levels calc status up down stop logs clean build test
 
 init:
 	@echo "Setting up grid trading bot..."
@@ -11,6 +11,9 @@ up:
 
 down:
 	docker compose down
+
+stop:
+	docker compose stop
 
 logs:
 	docker compose logs -f

@@ -16,6 +16,7 @@ const (
 )
 
 const (
+	StatusPlaced TransactionStatus = "PLACED"
 	StatusFilled TransactionStatus = "FILLED"
 	StatusError  TransactionStatus = "ERROR"
 )

@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 
     -- What happened (separate columns for clarity)
     side TEXT NOT NULL,           -- BUY | SELL
-    status TEXT NOT NULL,         -- FILLED | ERROR
+    status TEXT NOT NULL,         -- PLACED | FILLED | ERROR
 
     -- Order details (NULL for errors)
     order_id TEXT,               -- Exchange order ID
@@ -32,9 +32,10 @@ CREATE TABLE IF NOT EXISTS transactions (
 
     -- Constraints
     CONSTRAINT check_side CHECK (side IN ('BUY', 'SELL')),
-    CONSTRAINT check_status CHECK (status IN ('FILLED', 'ERROR')),
-    CONSTRAINT check_filled_has_order CHECK (status = 'ERROR' OR (order_id IS NOT NULL AND executed_price IS NOT NULL)),
-    CONSTRAINT check_error_has_code CHECK (status = 'FILLED' OR error_code IS NOT NULL)
+    CONSTRAINT check_status CHECK (status IN ('PLACED', 'FILLED', 'ERROR')),
+    CONSTRAINT check_placed_has_order CHECK (status = 'ERROR' OR order_id IS NOT NULL),
+    CONSTRAINT check_filled_has_executed_price CHECK (status != 'FILLED' OR executed_price IS NOT NULL),
+    CONSTRAINT check_error_has_code CHECK (status != 'ERROR' OR error_code IS NOT NULL)
 );
 
 -- Create indexes for performance

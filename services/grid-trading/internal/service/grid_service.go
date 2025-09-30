@@ -49,6 +49,8 @@ type OrderAssuranceInterface interface {
 
 // TransactionRepositoryInterface defines the interface for transaction repository operations
 type TransactionRepositoryInterface interface {
+	RecordBuyPlaced(gridLevelID int, symbol string, orderID string, targetPrice, amountUSDT decimal.Decimal) error
+	RecordSellPlaced(gridLevelID int, symbol string, orderID string, targetPrice, amountCoin decimal.Decimal) error
 	RecordBuyFilled(gridLevelID int, symbol string, orderID string, targetPrice, executedPrice, amountCoin, amountUSDT decimal.Decimal) error
 	RecordSellFilled(gridLevelID int, symbol string, orderID string, targetPrice, executedPrice, amountCoin, amountUSDT decimal.Decimal, relatedBuyID int, profitUSDT, profitPct decimal.Decimal) error
 	RecordBuyError(gridLevelID int, symbol string, targetPrice decimal.Decimal, errorCode, errorMsg string) error
@@ -165,6 +167,11 @@ func (s *GridService) tryPlaceBuyOrder(level *models.GridLevel) error {
 		return fmt.Errorf("failed to update buy order placed: %w", err)
 	}
 
+	// Record PLACED transaction
+	if err := s.txRepo.RecordBuyPlaced(level.ID, level.Symbol, orderResp.OrderID, level.BuyPrice, level.BuyAmount); err != nil {
+		log.Printf("WARNING: Failed to record buy placed transaction: %v", err)
+	}
+
 	log.Printf("SUCCESS: Placed buy order %s for level %d at price %s, amount %s", orderResp.OrderID, level.ID, level.BuyPrice, level.BuyAmount)
 	return nil
 }
@@ -204,6 +211,11 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 
 	if err := s.repo.UpdateSellOrderPlaced(level.ID, orderResp.OrderID); err != nil {
 		return fmt.Errorf("failed to update sell order placed: %w", err)
+	}
+
+	// Record PLACED transaction
+	if err := s.txRepo.RecordSellPlaced(level.ID, level.Symbol, orderResp.OrderID, level.SellPrice, level.FilledAmount.Decimal); err != nil {
+		log.Printf("WARNING: Failed to record sell placed transaction: %v", err)
 	}
 
 	log.Printf("Placed sell order %s for level %d at price %s", orderResp.OrderID, level.ID, level.SellPrice)

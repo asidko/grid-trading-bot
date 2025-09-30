@@ -15,6 +15,62 @@ func NewTransactionRepository(db *sql.DB) *TransactionRepository {
 	return &TransactionRepository{db: db}
 }
 
+func (r *TransactionRepository) RecordBuyPlaced(
+	gridLevelID int,
+	symbol string,
+	orderID string,
+	targetPrice decimal.Decimal,
+	amountUSDT decimal.Decimal,
+) error {
+	query := `
+		INSERT INTO transactions (
+			grid_level_id, symbol, side, status,
+			order_id, target_price, amount_usdt
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+
+	_, err := r.db.Exec(
+		query,
+		gridLevelID,
+		symbol,
+		models.SideBuy,
+		models.StatusPlaced,
+		orderID,
+		targetPrice,
+		amountUSDT,
+	)
+
+	return err
+}
+
+func (r *TransactionRepository) RecordSellPlaced(
+	gridLevelID int,
+	symbol string,
+	orderID string,
+	targetPrice decimal.Decimal,
+	amountCoin decimal.Decimal,
+) error {
+	query := `
+		INSERT INTO transactions (
+			grid_level_id, symbol, side, status,
+			order_id, target_price, amount_coin
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+
+	_, err := r.db.Exec(
+		query,
+		gridLevelID,
+		symbol,
+		models.SideSell,
+		models.StatusPlaced,
+		orderID,
+		targetPrice,
+		amountCoin,
+	)
+
+	return err
+}
+
 func (r *TransactionRepository) RecordBuyFilled(
 	gridLevelID int,
 	symbol string,
