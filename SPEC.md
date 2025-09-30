@@ -218,7 +218,7 @@ sync-all-orders()  // Runs hourly via scheduler
 - **ERROR state levels:** Skip trading, store reason in `error_msg`, require manual reset
 
 ### System Requirements
-- PostgreSQL database (no caching, always read from DB)
+- SQLite database (no caching, always read from DB)
 - Minimum 2 levels for operation
 - Configuration via direct database manipulation
 - No runtime API for level management

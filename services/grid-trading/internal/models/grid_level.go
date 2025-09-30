@@ -38,7 +38,8 @@ type GridLevel struct {
 func (g *GridLevel) CanPlaceBuy(currentPrice decimal.Decimal) bool {
 	return g.State == StateReady &&
 		g.Enabled &&
-		currentPrice.GreaterThan(g.BuyPrice)
+		currentPrice.GreaterThanOrEqual(g.BuyPrice) &&
+		currentPrice.LessThan(g.SellPrice)
 }
 
 func (g *GridLevel) CanPlaceSell(currentPrice decimal.Decimal) bool {

@@ -132,7 +132,7 @@ func (r *TransactionRepository) recordError(
 			  AND status = $4
 			  AND target_price = $5
 			  AND error_msg = $7
-			  AND created_at > NOW() - INTERVAL '1 hour'
+			  AND created_at > datetime('now', '-1 hour')
 		)
 	`
 

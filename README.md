@@ -110,13 +110,7 @@ Essential settings in `.env`:
 - `MONITOR_PORT=7070`
 
 **Database**:
-- `DB_HOST=localhost`
-- `DB_PORT=5432`
-- `DB_USER=postgres`
-- `DB_PASSWORD=postgres`
-- `DB_NAME=grid_trading`
-
-psql example: 
+- `DB_PATH=/data/grid_trading.db` - SQLite database file path 
 
 **Internal URLs**:
 - `ORDER_ASSURANCE_URL=http://localhost:9090`

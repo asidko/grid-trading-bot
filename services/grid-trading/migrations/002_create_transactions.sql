@@ -1,34 +1,34 @@
 -- Create transactions table for trade history and errors
 CREATE TABLE IF NOT EXISTS transactions (
     -- Identity
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     grid_level_id INTEGER NOT NULL REFERENCES grid_levels(id),
-    symbol VARCHAR(20) NOT NULL,
+    symbol TEXT NOT NULL,
 
     -- What happened (separate columns for clarity)
-    side VARCHAR(10) NOT NULL,           -- BUY | SELL
-    status VARCHAR(20) NOT NULL,         -- FILLED | ERROR
+    side TEXT NOT NULL,           -- BUY | SELL
+    status TEXT NOT NULL,         -- FILLED | ERROR
 
     -- Order details (NULL for errors)
-    order_id VARCHAR(100),               -- Exchange order ID
-    target_price DECIMAL(16,8) NOT NULL, -- Price we aimed for
-    executed_price DECIMAL(16,8),        -- Actual fill price (NULL if error)
+    order_id TEXT,               -- Exchange order ID
+    target_price TEXT NOT NULL, -- Price we aimed for
+    executed_price TEXT,        -- Actual fill price (NULL if error)
 
     -- Amounts (NULL for errors)
-    amount_coin DECIMAL(16,8),           -- ETH bought/sold
-    amount_usdt DECIMAL(16,8),           -- USDT spent/received
+    amount_coin TEXT,           -- ETH bought/sold
+    amount_usdt TEXT,           -- USDT spent/received
 
     -- Profit tracking (only for SELL with status=FILLED)
     related_buy_id INTEGER REFERENCES transactions(id),  -- Link to original buy
-    profit_usdt DECIMAL(16,8),           -- Sell USDT - Buy USDT
-    profit_pct DECIMAL(8,4),             -- (profit / buy cost) * 100
+    profit_usdt TEXT,           -- Sell USDT - Buy USDT
+    profit_pct TEXT,             -- (profit / buy cost) * 100
 
     -- Error details (only when status=ERROR)
-    error_code VARCHAR(50),              -- insufficient_funds, api_error, etc
+    error_code TEXT,              -- insufficient_funds, api_error, etc
     error_msg TEXT,                      -- Full error details
 
     -- Audit
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
 
     -- Constraints
     CONSTRAINT check_side CHECK (side IN ('BUY', 'SELL')),

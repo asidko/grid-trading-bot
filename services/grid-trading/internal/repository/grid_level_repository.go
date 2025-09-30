@@ -19,13 +19,23 @@ func NewGridLevelRepository(db *sql.DB) *GridLevelRepository {
 
 func (r *GridLevelRepository) scanLevel(scanner interface{ Scan(...interface{}) error }) (*models.GridLevel, error) {
 	level := &models.GridLevel{}
+	var stateChangedAt, createdAt, updatedAt string
 	err := scanner.Scan(
 		&level.ID, &level.Symbol, &level.BuyPrice, &level.SellPrice,
 		&level.BuyAmount, &level.FilledAmount, &level.State,
 		&level.BuyOrderID, &level.SellOrderID, &level.Enabled,
-		&level.StateChangedAt, &level.CreatedAt, &level.UpdatedAt,
+		&stateChangedAt, &createdAt, &updatedAt,
 	)
-	return level, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse timestamps from TEXT format
+	level.StateChangedAt, _ = time.Parse("2006-01-02 15:04:05", stateChangedAt)
+	level.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAt)
+	level.UpdatedAt, _ = time.Parse("2006-01-02 15:04:05", updatedAt)
+
+	return level, nil
 }
 
 func (r *GridLevelRepository) GetBySymbol(symbol string) ([]*models.GridLevel, error) {
@@ -172,7 +182,7 @@ func (r *GridLevelRepository) UpdateState(id int, state models.GridState) error 
 
 	query := `
 		UPDATE grid_levels
-		SET state = $1, state_changed_at = NOW(), updated_at = NOW()
+		SET state = $1, state_changed_at = datetime('now'), updated_at = datetime('now')
 		WHERE id = $2
 	`
 
@@ -193,7 +203,7 @@ func (r *GridLevelRepository) UpdateBuyOrderPlaced(id int, orderID string) error
 
 	query := `
 		UPDATE grid_levels
-		SET state = $1, buy_order_id = $2, state_changed_at = NOW(), updated_at = NOW()
+		SET state = $1, buy_order_id = $2, state_changed_at = datetime('now'), updated_at = datetime('now')
 		WHERE id = $3 AND state = $4
 	`
 
@@ -223,7 +233,7 @@ func (r *GridLevelRepository) UpdateSellOrderPlaced(id int, orderID string) erro
 
 	query := `
 		UPDATE grid_levels
-		SET state = $1, sell_order_id = $2, state_changed_at = NOW(), updated_at = NOW()
+		SET state = $1, sell_order_id = $2, state_changed_at = datetime('now'), updated_at = datetime('now')
 		WHERE id = $3 AND state = $4
 	`
 
@@ -254,7 +264,7 @@ func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decima
 	query := `
 		UPDATE grid_levels
 		SET state = $1, filled_amount = $2, buy_order_id = NULL,
-		    state_changed_at = NOW(), updated_at = NOW()
+		    state_changed_at = datetime('now'), updated_at = datetime('now')
 		WHERE id = $3 AND state = $4
 	`
 
@@ -285,7 +295,7 @@ func (r *GridLevelRepository) ProcessSellFill(id int) error {
 	query := `
 		UPDATE grid_levels
 		SET state = $1, filled_amount = NULL, sell_order_id = NULL,
-		    state_changed_at = NOW(), updated_at = NOW()
+		    state_changed_at = datetime('now'), updated_at = datetime('now')
 		WHERE id = $2 AND state = $3
 	`
 
@@ -315,7 +325,7 @@ func (r *GridLevelRepository) TryStartBuyOrder(id int) (bool, error) {
 
 	query := `
 		UPDATE grid_levels
-		SET state = $1, state_changed_at = NOW(), updated_at = NOW()
+		SET state = $1, state_changed_at = datetime('now'), updated_at = datetime('now')
 		WHERE id = $2 AND state = $3 AND enabled = true
 	`
 
@@ -345,7 +355,7 @@ func (r *GridLevelRepository) TryStartSellOrder(id int) (bool, error) {
 
 	query := `
 		UPDATE grid_levels
-		SET state = $1, state_changed_at = NOW(), updated_at = NOW()
+		SET state = $1, state_changed_at = datetime('now'), updated_at = datetime('now')
 		WHERE id = $2 AND state = $3 AND enabled = true AND filled_amount IS NOT NULL
 	`
 

@@ -22,18 +22,13 @@ import (
 func main() {
 
 	if err := godotenv.Load(); err != nil {
-		log.Printf("No .env file found: %v", err)
+		log.Printf("No .env file found, using params from environment only.")
 	}
 
 	cfg := config.LoadConfig()
 
 	dbCfg := database.Config{
-		Host:     cfg.DBHost,
-		Port:     cfg.DBPort,
-		User:     cfg.DBUser,
-		Password: cfg.DBPassword,
-		DBName:   cfg.DBName,
-		SSLMode:  cfg.DBSSLMode,
+		Path: cfg.DBPath,
 	}
 
 	db, err := database.NewConnection(dbCfg)

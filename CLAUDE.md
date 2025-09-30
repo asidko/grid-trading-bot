@@ -1,7 +1,7 @@
 # Grid Trading Bot - Core Knowledge
 
 ## Architecture
-3 Go microservices: **grid-trading** (8080), **order-assurance** (9090), **price-monitor** (7070) + PostgreSQL
+3 Go microservices: **grid-trading** (8080), **order-assurance** (9090), **price-monitor** (7070) + SQLite
 
 ## State Machine
 ```

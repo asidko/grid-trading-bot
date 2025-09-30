@@ -1,22 +1,4 @@
 services:
-  # PostgreSQL Database
-  postgres:
-    image: postgres:15-alpine
-    container_name: grid-trading-db
-    network_mode: host
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_NAME}
-      PGPORT: ${DB_PORT}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -p ${DB_PORT}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # Grid Trading Service
   grid-trading:
     build:
@@ -24,22 +6,17 @@ services:
       dockerfile: services/grid-trading/Dockerfile
     container_name: grid-trading-service
     network_mode: host
+    volumes:
+      - ./.grid-trading-data:/data
     environment:
       SERVER_PORT: ${GRID_PORT}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_NAME: ${DB_NAME}
-      DB_SSL_MODE: disable
+      DB_PATH: ${DB_PATH}
       ORDER_ASSURANCE_URL: ${ORDER_ASSURANCE_URL}
       SYNC_JOB_ENABLED: ${SYNC_JOB_ENABLED}
       SYNC_JOB_CRON: ${SYNC_JOB_CRON}
+      TRADING_FEE: ${TRADING_FEE}
     depends_on:
-      postgres:
-        condition: service_healthy
-      order-assurance:
-        condition: service_started
+      - order-assurance
 
   # Order Assurance Service
   order-assurance:
@@ -69,48 +46,5 @@ services:
     depends_on:
       - grid-trading
 
-  # Postgres UI
-  # http://localhost:8082/
-  pgadmin:
-    image: dpage/pgadmin4:9
-    container_name: grid-trading-pgadmin
-    network_mode: host
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=postgres@example.com
-      - PGADMIN_DEFAULT_PASSWORD=postgres
-      - PGADMIN_LISTEN_PORT=8082
-      - PGADMIN_CONFIG_SERVER_MODE=False
-      - PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False
-      - PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION=False
-      - PGADMIN_CONFIG_WTF_CSRF_CHECK_DEFAULT=False
-    entrypoint: /bin/sh -c "chmod 600 /pgpass; /entrypoint.sh;"
-    user: root
-    configs:
-      - source: servers.json
-        target: /pgadmin4/servers.json
-      - source: pgpass
-        target: /pgpass
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-# Configure automatic connection for Postgres UI
-configs:
-  pgpass:
-    content: |
-      localhost:${DB_PORT}:*:${DB_USER}:${DB_PASSWORD}
-  servers.json:
-    content: |
-      {"Servers": {"1": {
-        "Group": "Servers",
-        "Name": "${DB_NAME}-server",
-        "Host": "localhost",
-        "Port": ${DB_PORT},
-        "MaintenanceDB": "${DB_NAME}",
-        "Username": "${DB_USER}",
-        "PassFile": "/pgpass",
-        "SSLMode": "prefer"
-      }}}
-
 volumes:
-  postgres_data:
+  grid_data:

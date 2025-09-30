@@ -1,22 +1,22 @@
 -- Create grid_levels table
 CREATE TABLE IF NOT EXISTS grid_levels (
-    id SERIAL PRIMARY KEY,
-    symbol VARCHAR(20) NOT NULL,
-    buy_price DECIMAL(16,8) NOT NULL,
-    sell_price DECIMAL(16,8) NOT NULL,
-    buy_amount DECIMAL(16,8) NOT NULL,
-    filled_amount DECIMAL(16,8),
-    state VARCHAR(20) NOT NULL DEFAULT 'READY',
-    buy_order_id VARCHAR(100),
-    sell_order_id VARCHAR(100),
-    enabled BOOLEAN DEFAULT true,
-    state_changed_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    buy_price TEXT NOT NULL,
+    sell_price TEXT NOT NULL,
+    buy_amount TEXT NOT NULL,
+    filled_amount TEXT,
+    state TEXT NOT NULL DEFAULT 'READY',
+    buy_order_id TEXT,
+    sell_order_id TEXT,
+    enabled INTEGER DEFAULT 1,
+    state_changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
 
     -- Constraints
     CONSTRAINT unique_level UNIQUE (symbol, buy_price, sell_price),
-    CONSTRAINT check_prices CHECK (sell_price > buy_price),
+    CONSTRAINT check_prices CHECK (CAST(sell_price AS REAL) > CAST(buy_price AS REAL)),
     CONSTRAINT check_state CHECK (state IN ('READY', 'PLACING_BUY', 'BUY_ACTIVE', 'HOLDING', 'PLACING_SELL', 'SELL_ACTIVE', 'ERROR'))
 );
 
