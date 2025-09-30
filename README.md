@@ -76,6 +76,27 @@ Interactive prompts will guide you through setup. Example grid:
 
 This creates 5 levels at: 3500, 3700, 3900, 4100, 4300
 
+### Check Status
+
+```bash
+make status
+```
+
+Shows your trading performance:
+```
+📊 Activity: 5 buys, 3 sells, 0 errors
+💰 Profit: 12.45 today | 78.90 week | 234.56 month | 1024.78 total (USDT)
+📈 Levels: 8 holding, 12 ready
+
+🟢 Last Buy: ETHUSDT @ 4100
+   Amount: 0.122 | Time: 2025-09-30T09:15:23Z
+
+🔴 Last Sell: ETHUSDT @ 4200
+   Profit: 4.85 USDT (0.97%) | Time: 2025-09-30T11:42:10Z
+
+📍 Price: ETHUSDT @ 4158.35 | 2025-09-30T12:30:45Z
+```
+
 ### Monitor
 
 ```bash

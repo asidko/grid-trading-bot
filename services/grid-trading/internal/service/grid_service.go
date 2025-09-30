@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/grid-trading-bot/services/grid-trading/internal/client"
@@ -21,6 +22,7 @@ type GridLevelRepositoryInterface interface {
 	GetStuckInPlacingState(timeout time.Duration) ([]*models.GridLevel, error)
 	GetAllActive() ([]*models.GridLevel, error)
 	GetDistinctSymbols() ([]string, error)
+	GetLevelCounts() (holding, ready int, err error)
 
 	// State management operations
 	TryStartBuyOrder(id int) (bool, error)
@@ -52,6 +54,10 @@ type TransactionRepositoryInterface interface {
 	RecordBuyError(gridLevelID int, symbol string, targetPrice decimal.Decimal, errorCode, errorMsg string) error
 	RecordSellError(gridLevelID int, symbol string, targetPrice decimal.Decimal, errorCode, errorMsg string) error
 	GetLastBuyForLevel(gridLevelID int) (*models.Transaction, error)
+	GetDailyStats() (buys, sells, errors int, profit decimal.Decimal, err error)
+	GetProfitStats() (today, week, month, allTime decimal.Decimal, err error)
+	GetLastBuy() (*models.Transaction, error)
+	GetLastSell() (*models.Transaction, error)
 }
 
 type GridService struct {
@@ -59,6 +65,11 @@ type GridService struct {
 	txRepo     TransactionRepositoryInterface
 	assurance  OrderAssuranceInterface
 	tradingFee float64
+
+	lastPriceMu     sync.RWMutex
+	lastPriceSymbol string
+	lastPrice       decimal.Decimal
+	lastPriceTime   time.Time
 }
 
 // NewGridService creates a new GridService
@@ -83,6 +94,13 @@ func (s *GridService) CheckHealth() error {
 }
 
 func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) error {
+	// Store last price update
+	s.lastPriceMu.Lock()
+	s.lastPriceSymbol = symbol
+	s.lastPrice = price
+	s.lastPriceTime = time.Now()
+	s.lastPriceMu.Unlock()
+
 	levels, err := s.repo.GetBySymbol(symbol)
 	if err != nil {
 		return fmt.Errorf("failed to get levels for symbol %s: %w", symbol, err)
@@ -499,4 +517,118 @@ func (s *GridService) GetAllGridLevels() ([]*models.GridLevel, error) {
 // GetGridSymbols retrieves all distinct symbols used in grid levels
 func (s *GridService) GetGridSymbols() ([]string, error) {
 	return s.repo.GetDistinctSymbols()
+}
+
+type StatusResponse struct {
+	Date              string             `json:"date"`
+	BuysToday         int                `json:"buys_today"`
+	SellsToday        int                `json:"sells_today"`
+	ProfitToday       decimal.Decimal    `json:"profit_today"`
+	ProfitThisWeek    decimal.Decimal    `json:"profit_this_week"`
+	ProfitThisMonth   decimal.Decimal    `json:"profit_this_month"`
+	ProfitAllTime     decimal.Decimal    `json:"profit_all_time"`
+	LastBuy           *TransactionInfo   `json:"last_buy,omitempty"`
+	LastSell          *TransactionInfo   `json:"last_sell,omitempty"`
+	LastPriceUpdate   *PriceUpdateInfo   `json:"last_price_update,omitempty"`
+	LevelsHolding     int                `json:"levels_holding"`
+	LevelsReady       int                `json:"levels_ready"`
+	ErrorsToday       int                `json:"errors_today"`
+}
+
+type TransactionInfo struct {
+	Symbol     string          `json:"symbol"`
+	Price      decimal.Decimal `json:"price"`
+	Amount     decimal.Decimal `json:"amount"`
+	Time       string          `json:"time"`
+	ProfitUSDT decimal.Decimal `json:"profit_usdt,omitempty"`
+	ProfitPct  decimal.Decimal `json:"profit_pct,omitempty"`
+}
+
+type PriceUpdateInfo struct {
+	Symbol    string          `json:"symbol"`
+	Price     decimal.Decimal `json:"price"`
+	UpdatedAt string          `json:"updated_at"`
+}
+
+func (s *GridService) GetStatus() (*StatusResponse, error) {
+	// Get daily stats
+	buys, sells, errors, profitToday, err := s.txRepo.GetDailyStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get daily stats: %w", err)
+	}
+
+	// Get profit stats
+	_, profitWeek, profitMonth, profitAllTime, err := s.txRepo.GetProfitStats()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get profit stats: %w", err)
+	}
+
+	// Get last buy
+	lastBuyTx, err := s.txRepo.GetLastBuy()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last buy: %w", err)
+	}
+
+	// Get last sell
+	lastSellTx, err := s.txRepo.GetLastSell()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last sell: %w", err)
+	}
+
+	// Get level counts
+	holding, ready, err := s.repo.GetLevelCounts()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get level counts: %w", err)
+	}
+
+	// Get last price update
+	s.lastPriceMu.RLock()
+	var lastPriceUpdate *PriceUpdateInfo
+	if !s.lastPriceTime.IsZero() {
+		lastPriceUpdate = &PriceUpdateInfo{
+			Symbol:    s.lastPriceSymbol,
+			Price:     s.lastPrice,
+			UpdatedAt: s.lastPriceTime.Format(time.RFC3339),
+		}
+	}
+	s.lastPriceMu.RUnlock()
+
+	// Build response
+	response := &StatusResponse{
+		Date:            time.Now().Format("2006-01-02"),
+		BuysToday:       buys,
+		SellsToday:      sells,
+		ProfitToday:     profitToday,
+		ProfitThisWeek:  profitWeek,
+		ProfitThisMonth: profitMonth,
+		ProfitAllTime:   profitAllTime,
+		LastPriceUpdate: lastPriceUpdate,
+		LevelsHolding:   holding,
+		LevelsReady:     ready,
+		ErrorsToday:     errors,
+	}
+
+	// Add last buy info
+	if lastBuyTx != nil {
+		response.LastBuy = &TransactionInfo{
+			Symbol: lastBuyTx.Symbol,
+			Price:  lastBuyTx.ExecutedPrice.Decimal,
+			Amount: lastBuyTx.AmountCoin.Decimal,
+			Time:   lastBuyTx.CreatedAt.Format(time.RFC3339),
+		}
+	}
+
+	// Add last sell info
+	if lastSellTx != nil {
+		response.LastSell = &TransactionInfo{
+			Symbol:     lastSellTx.Symbol,
+			Price:      lastSellTx.ExecutedPrice.Decimal,
+			Amount:     lastSellTx.AmountCoin.Decimal,
+			Time:       lastSellTx.CreatedAt.Format(time.RFC3339),
+			ProfitUSDT: lastSellTx.ProfitUSDT.Decimal,
+			ProfitPct:  lastSellTx.ProfitPct.Decimal,
+		}
+	}
+
+	return response, nil
 }

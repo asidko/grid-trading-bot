@@ -456,3 +456,16 @@ func (r *GridLevelRepository) GetDistinctSymbols() ([]string, error) {
 	return symbols, rows.Err()
 }
 
+func (r *GridLevelRepository) GetLevelCounts() (holding, ready int, err error) {
+	query := `
+		SELECT
+			COUNT(CASE WHEN state = 'HOLDING' THEN 1 END) as holding,
+			COUNT(CASE WHEN state = 'READY' THEN 1 END) as ready
+		FROM grid_levels
+		WHERE enabled = 1
+	`
+
+	err = r.db.QueryRow(query).Scan(&holding, &ready)
+	return holding, ready, err
+}
+

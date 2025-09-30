@@ -32,6 +32,7 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/order-fill-notification", h.handleFillNotification).Methods("POST")
 	r.HandleFunc("/order-fill-error-notification", h.handleErrorNotification).Methods("POST")
 	r.HandleFunc("/health", h.handleHealth).Methods("GET")
+	r.HandleFunc("/status", h.handleStatus).Methods("GET")
 }
 
 type PriceTriggerRequest struct {
@@ -241,4 +242,17 @@ func (h *Handlers) handleGetGridSymbols(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string][]string{"symbols": symbols})
+}
+
+func (h *Handlers) handleStatus(w http.ResponseWriter, r *http.Request) {
+	status, err := h.gridService.GetStatus()
+	if err != nil {
+		log.Printf("Error getting status: %v", err)
+		http.Error(w, "Failed to get status", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(status)
 }

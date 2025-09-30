@@ -1,4 +1,4 @@
-.PHONY: init levels calc up down logs clean build test
+.PHONY: init levels calc status up down logs clean build test
 
 init:
 	@echo "Setting up grid trading bot..."
@@ -75,3 +75,25 @@ calc:
 	profit=$$(echo "$$sell_net - $$buy_cost" | bc -l); \
 	pct=$$(echo "$$profit / $$buy_cost * 100" | bc -l); \
 	printf "\nStep: %s | Profit: %.2f USDT (%.2f%%)\n\n" $$step $$profit $$pct
+
+status:
+	@echo "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "Grid Trading Status"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@data=$$(curl -s http://localhost:8080/status); \
+	[ -z "$$data" ] && echo "✗ Service unavailable" && exit 1; \
+	echo "\n📊 Activity: $$(echo $$data | jq -r '.buys_today') buys, $$(echo $$data | jq -r '.sells_today') sells, $$(echo $$data | jq -r '.errors_today') errors"; \
+	echo "💰 Profit: $$(echo $$data | jq -r '.profit_today') today | $$(echo $$data | jq -r '.profit_this_week') week | $$(echo $$data | jq -r '.profit_this_month') month | $$(echo $$data | jq -r '.profit_all_time') total (USDT)"; \
+	echo "📈 Levels: $$(echo $$data | jq -r '.levels_holding') holding, $$(echo $$data | jq -r '.levels_ready') ready"; \
+	echo $$data | jq -e '.last_buy' > /dev/null 2>&1 && [ "$$(echo $$data | jq -r '.last_buy')" != "null" ] && { \
+		echo "\n🟢 Last Buy: $$(echo $$data | jq -r '.last_buy.symbol') @ $$(echo $$data | jq -r '.last_buy.price')"; \
+		echo "   Amount: $$(echo $$data | jq -r '.last_buy.amount') | Time: $$(echo $$data | jq -r '.last_buy.time')"; \
+	} || true; \
+	echo $$data | jq -e '.last_sell' > /dev/null 2>&1 && [ "$$(echo $$data | jq -r '.last_sell')" != "null" ] && { \
+		echo "\n🔴 Last Sell: $$(echo $$data | jq -r '.last_sell.symbol') @ $$(echo $$data | jq -r '.last_sell.price')"; \
+		echo "   Profit: $$(echo $$data | jq -r '.last_sell.profit_usdt') USDT ($$(echo $$data | jq -r '.last_sell.profit_pct')%) | Time: $$(echo $$data | jq -r '.last_sell.time')"; \
+	} || true; \
+	echo $$data | jq -e '.last_price_update' > /dev/null 2>&1 && [ "$$(echo $$data | jq -r '.last_price_update')" != "null" ] && { \
+		echo "\n📍 Price: $$(echo $$data | jq -r '.last_price_update.symbol') @ $$(echo $$data | jq -r '.last_price_update.price') | $$(echo $$data | jq -r '.last_price_update.updated_at')"; \
+	} || true; \
+	echo "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
