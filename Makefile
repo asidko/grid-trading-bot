@@ -1,16 +1,13 @@
 .PHONY: up down logs restart clean build test
 
 up:
-	docker compose up -d
+	docker compose up -d --build
 
 down:
 	docker compose down
 
 logs:
 	docker compose logs -f
-
-restart:
-	docker compose restart
 
 clean:
 	docker compose down -v
