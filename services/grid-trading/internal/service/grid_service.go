@@ -249,14 +249,17 @@ func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount, f
 		return nil
 	}
 
-	if err := s.repo.ProcessBuyFill(level.ID, filledAmount); err != nil {
-		return fmt.Errorf("failed to process buy fill: %w", err)
-	}
-
-	// Record transaction
+	// Record transaction FIRST (audit trail before state change)
 	amountUSDT := filledAmount.Mul(fillPrice)
 	if err := s.txRepo.RecordBuyFilled(level.ID, level.Symbol, orderID, level.BuyPrice, fillPrice, filledAmount, amountUSDT); err != nil {
-		log.Printf("ERROR: Failed to record buy transaction for level %d: %v", level.ID, err)
+		log.Printf("ERROR: CRITICAL - Failed to record buy transaction for level %d: %v - NOT updating state!", level.ID, err)
+		return fmt.Errorf("failed to record buy fill transaction: %w", err)
+	}
+
+	// Now update state
+	if err := s.repo.ProcessBuyFill(level.ID, filledAmount); err != nil {
+		log.Printf("ERROR: CRITICAL - Recorded buy TX but failed state update for level %d: %v", level.ID, err)
+		return fmt.Errorf("failed to process buy fill: %w", err)
 	}
 
 	log.Printf("INFO: Processed buy fill for level %d - Order: %s, Amount: %s coins, Fill Price: %s, Total: %s USDT",
@@ -303,39 +306,46 @@ func (s *GridService) ProcessSellFillNotification(orderID string, filledAmount, 
 		log.Printf("WARNING: No buy transaction found for level %d - cannot calculate profit", level.ID)
 	}
 
-	if err := s.repo.ProcessSellFill(level.ID); err != nil {
-		return fmt.Errorf("failed to process sell fill: %w", err)
-	}
-
-	// Record transaction with profit (including fees)
+	// Calculate profit BEFORE recording
 	sellAmountUSDT := filledAmount.Mul(fillPrice)
 	var relatedBuyID int
 	var profitUSDT, profitPct decimal.Decimal
 
 	if buyTx != nil && buyTx.AmountUSDT.Valid && buyTx.AmountUSDT.Decimal.GreaterThan(decimal.Zero) {
 		relatedBuyID = buyTx.ID
-
-		// Calculate fees: buy fee + sell fee
 		buyFee := buyTx.AmountUSDT.Decimal.Mul(decimal.NewFromFloat(s.tradingFee / 100))
 		sellFee := sellAmountUSDT.Mul(decimal.NewFromFloat(s.tradingFee / 100))
 		totalFees := buyFee.Add(sellFee)
-
-		// Profit = Sell Amount - Buy Amount - Total Fees
 		profitUSDT = sellAmountUSDT.Sub(buyTx.AmountUSDT.Decimal).Sub(totalFees)
 		profitPct = profitUSDT.Div(buyTx.AmountUSDT.Decimal).Mul(decimal.NewFromInt(100))
-		log.Printf("INFO: Processed sell fill for level %d - Order: %s, Amount: %s coins, Fill Price: %s, Total: %s USDT",
+	}
+
+	// Record transaction FIRST (audit trail before state change)
+	if err := s.txRepo.RecordSellFilled(level.ID, level.Symbol, orderID, level.SellPrice, fillPrice, filledAmount, sellAmountUSDT, relatedBuyID, profitUSDT, profitPct); err != nil {
+		log.Printf("ERROR: CRITICAL - Failed to record sell transaction for level %d: %v - NOT updating state!", level.ID, err)
+		return fmt.Errorf("failed to record sell fill transaction: %w", err)
+	}
+
+	// Now update state
+	if err := s.repo.ProcessSellFill(level.ID); err != nil {
+		log.Printf("ERROR: CRITICAL - Recorded sell TX but failed state update for level %d: %v", level.ID, err)
+		return fmt.Errorf("failed to process sell fill: %w", err)
+	}
+
+	if buyTx != nil && buyTx.AmountUSDT.Valid && buyTx.AmountUSDT.Decimal.GreaterThan(decimal.Zero) {
+		buyFee := buyTx.AmountUSDT.Decimal.Mul(decimal.NewFromFloat(s.tradingFee / 100))
+		sellFee := sellAmountUSDT.Mul(decimal.NewFromFloat(s.tradingFee / 100))
+		totalFees := buyFee.Add(sellFee)
+		log.Printf("INFO: Processed sell fill for level %d - Order: %s, Amount: %s coins @ %s, Total: %s USDT",
 			level.ID, orderID, filledAmount, fillPrice, sellAmountUSDT)
 		log.Printf("SUCCESS: Cycle complete for level %d - Buy: %s USDT, Sell: %s USDT, Fees: %s USDT, Profit: %s USDT (%s%%)",
 			level.ID, buyTx.AmountUSDT.Decimal, sellAmountUSDT, totalFees, profitUSDT, profitPct)
 	} else {
-		log.Printf("INFO: Processed sell fill for level %d - Order: %s, Amount: %s coins, Fill Price: %s, Total: %s USDT",
+		log.Printf("INFO: Processed sell fill for level %d - Order: %s, Amount: %s coins @ %s, Total: %s USDT",
 			level.ID, orderID, filledAmount, fillPrice, sellAmountUSDT)
 		log.Printf("WARNING: Cycle complete for level %d but profit N/A (no buy transaction found)", level.ID)
 	}
 
-	if err := s.txRepo.RecordSellFilled(level.ID, level.Symbol, orderID, level.SellPrice, fillPrice, filledAmount, sellAmountUSDT, relatedBuyID, profitUSDT, profitPct); err != nil {
-		log.Printf("ERROR: Failed to record sell transaction for level %d: %v", level.ID, err)
-	}
 	return nil
 }
 
