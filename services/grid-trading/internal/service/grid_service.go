@@ -229,7 +229,7 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 		log.Printf("WARNING: Failed to record sell placed transaction: %v", err)
 	}
 
-	log.Printf("Placed sell order %s for level %d at price %s", orderResp.OrderID, level.ID, level.SellPrice)
+	log.Printf("SUCCESS: Placed sell order %s for level %d at price %s, amount %s", orderResp.OrderID, level.ID, level.SellPrice, level.FilledAmount.Decimal)
 	return nil
 }
 
@@ -259,7 +259,8 @@ func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount, f
 		log.Printf("ERROR: Failed to record buy transaction for level %d: %v", level.ID, err)
 	}
 
-	log.Printf("Processed buy fill for level %d, filled amount: %s", level.ID, filledAmount)
+	log.Printf("INFO: Processed buy fill for level %d - Order: %s, Amount: %s coins, Fill Price: %s, Total: %s USDT",
+		level.ID, orderID, filledAmount, fillPrice, amountUSDT)
 
 	// Immediately place sell order now that we're in HOLDING state
 	updatedLevel, err := s.repo.GetByID(level.ID)
@@ -322,9 +323,14 @@ func (s *GridService) ProcessSellFillNotification(orderID string, filledAmount, 
 		// Profit = Sell Amount - Buy Amount - Total Fees
 		profitUSDT = sellAmountUSDT.Sub(buyTx.AmountUSDT.Decimal).Sub(totalFees)
 		profitPct = profitUSDT.Div(buyTx.AmountUSDT.Decimal).Mul(decimal.NewFromInt(100))
-		log.Printf("Processed sell fill for level %d, cycle complete. Profit: %s USDT (%s%%) [Fees: %s USDT]", level.ID, profitUSDT, profitPct, totalFees)
+		log.Printf("INFO: Processed sell fill for level %d - Order: %s, Amount: %s coins, Fill Price: %s, Total: %s USDT",
+			level.ID, orderID, filledAmount, fillPrice, sellAmountUSDT)
+		log.Printf("SUCCESS: Cycle complete for level %d - Buy: %s USDT, Sell: %s USDT, Fees: %s USDT, Profit: %s USDT (%s%%)",
+			level.ID, buyTx.AmountUSDT.Decimal, sellAmountUSDT, totalFees, profitUSDT, profitPct)
 	} else {
-		log.Printf("Processed sell fill for level %d, cycle complete. Profit: N/A (no buy transaction)", level.ID)
+		log.Printf("INFO: Processed sell fill for level %d - Order: %s, Amount: %s coins, Fill Price: %s, Total: %s USDT",
+			level.ID, orderID, filledAmount, fillPrice, sellAmountUSDT)
+		log.Printf("WARNING: Cycle complete for level %d but profit N/A (no buy transaction found)", level.ID)
 	}
 
 	if err := s.txRepo.RecordSellFilled(level.ID, level.Symbol, orderID, level.SellPrice, fillPrice, filledAmount, sellAmountUSDT, relatedBuyID, profitUSDT, profitPct); err != nil {
@@ -440,39 +446,44 @@ func (s *GridService) SyncOrders() error {
 func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID string, isBuy bool) {
 	status, err := s.assurance.GetOrderStatus(level.Symbol, orderID)
 	if err != nil {
-		log.Printf("Failed to get order status for %s: %v", orderID, err)
+		log.Printf("ERROR: Failed to get order status for %s (level %d): %v", orderID, level.ID, err)
 		return
 	}
 
 	if status == nil {
-		log.Printf("Order %s not found, resetting level %d", orderID, level.ID)
+		targetState := models.StateHolding
 		if isBuy {
-			s.repo.UpdateState(level.ID, models.StateReady)
-		} else {
-			s.repo.UpdateState(level.ID, models.StateHolding)
+			targetState = models.StateReady
 		}
+		log.Printf("WARNING: Order %s not found on exchange, resetting level %d to %s", orderID, level.ID, targetState)
+		s.repo.UpdateState(level.ID, targetState)
 		return
 	}
 
 	switch status.Status {
 	case "filled":
 		if status.FilledAmount == nil || status.FillPrice == nil {
+			log.Printf("WARNING: Order %s marked as filled but missing fill details (level %d)", orderID, level.ID)
 			return
 		}
 
-		// Reuse the existing notification handler logic (they check state internally)
+		log.Printf("INFO: Order %s filled - Amount: %s @ %s (level %d)", orderID, *status.FilledAmount, *status.FillPrice, level.ID)
 		if isBuy {
 			s.ProcessBuyFillNotification(orderID, *status.FilledAmount, *status.FillPrice)
 		} else {
 			s.ProcessSellFillNotification(orderID, *status.FilledAmount, *status.FillPrice)
 		}
 	case "cancelled":
-		log.Printf("Order %s cancelled, resetting level %d", orderID, level.ID)
+		targetState := models.StateHolding
 		if isBuy {
-			s.repo.UpdateState(level.ID, models.StateReady)
-		} else {
-			s.repo.UpdateState(level.ID, models.StateHolding)
+			targetState = models.StateReady
 		}
+		log.Printf("WARNING: Order %s cancelled on exchange, resetting level %d to %s", orderID, level.ID, targetState)
+		s.repo.UpdateState(level.ID, targetState)
+	case "open":
+		// Normal case - no logging needed to avoid flooding logs
+	default:
+		log.Printf("WARNING: Order %s has unknown status '%s' (level %d)", orderID, status.Status, level.ID)
 	}
 }
 

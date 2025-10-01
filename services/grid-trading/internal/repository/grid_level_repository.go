@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/grid-trading-bot/services/grid-trading/internal/models"
@@ -186,12 +187,25 @@ func (r *GridLevelRepository) UpdateState(id int, state models.GridState) error 
 		WHERE id = $2
 	`
 
-	_, err = tx.Exec(query, state, id)
+	result, err := tx.Exec(query, state, id)
 	if err != nil {
+		log.Printf("ERROR: Failed to update state for level %d to %s: %v", id, state, err)
 		return err
 	}
 
-	return tx.Commit()
+	rowsAffected, _ := result.RowsAffected()
+	if err := tx.Commit(); err != nil {
+		log.Printf("ERROR: Failed to commit state update for level %d: %v", id, err)
+		return err
+	}
+
+	if rowsAffected > 0 {
+		log.Printf("INFO: Level %d state → %s", id, state)
+	} else {
+		log.Printf("WARNING: Level %d state update to %s affected 0 rows", id, state)
+	}
+
+	return nil
 }
 
 func (r *GridLevelRepository) UpdateBuyOrderPlaced(id int, orderID string) error {
@@ -209,6 +223,7 @@ func (r *GridLevelRepository) UpdateBuyOrderPlaced(id int, orderID string) error
 
 	result, err := tx.Exec(query, models.StateBuyActive, orderID, id, models.StatePlacingBuy)
 	if err != nil {
+		log.Printf("ERROR: Failed to update buy order for level %d: %v", id, err)
 		return err
 	}
 
@@ -218,10 +233,17 @@ func (r *GridLevelRepository) UpdateBuyOrderPlaced(id int, orderID string) error
 	}
 
 	if rowsAffected == 0 {
+		log.Printf("ERROR: Level %d not in PLACING_BUY state, cannot update buy order %s", id, orderID)
 		return fmt.Errorf("level %d not in PLACING_BUY state", id)
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		log.Printf("ERROR: Failed to commit buy order update for level %d: %v", id, err)
+		return err
+	}
+
+	log.Printf("INFO: Level %d → BUY_ACTIVE, buy_order_id=%s", id, orderID)
+	return nil
 }
 
 func (r *GridLevelRepository) UpdateSellOrderPlaced(id int, orderID string) error {
@@ -239,6 +261,7 @@ func (r *GridLevelRepository) UpdateSellOrderPlaced(id int, orderID string) erro
 
 	result, err := tx.Exec(query, models.StateSellActive, orderID, id, models.StatePlacingSell)
 	if err != nil {
+		log.Printf("ERROR: Failed to update sell order for level %d: %v", id, err)
 		return err
 	}
 
@@ -248,10 +271,17 @@ func (r *GridLevelRepository) UpdateSellOrderPlaced(id int, orderID string) erro
 	}
 
 	if rowsAffected == 0 {
+		log.Printf("ERROR: Level %d not in PLACING_SELL state, cannot update sell order %s", id, orderID)
 		return fmt.Errorf("level %d not in PLACING_SELL state", id)
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		log.Printf("ERROR: Failed to commit sell order update for level %d: %v", id, err)
+		return err
+	}
+
+	log.Printf("INFO: Level %d → SELL_ACTIVE, sell_order_id=%s", id, orderID)
+	return nil
 }
 
 func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decimal) error {
@@ -270,6 +300,7 @@ func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decima
 
 	result, err := tx.Exec(query, models.StateHolding, filledAmount, id, models.StateBuyActive)
 	if err != nil {
+		log.Printf("ERROR: Failed to process buy fill for level %d: %v", id, err)
 		return err
 	}
 
@@ -279,10 +310,17 @@ func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decima
 	}
 
 	if rowsAffected == 0 {
+		log.Printf("WARNING: Level %d not in BUY_ACTIVE state, skipping buy fill processing", id)
 		return nil
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		log.Printf("ERROR: Failed to commit buy fill for level %d: %v", id, err)
+		return err
+	}
+
+	log.Printf("INFO: Level %d → HOLDING, filled_amount=%s", id, filledAmount)
+	return nil
 }
 
 func (r *GridLevelRepository) ProcessSellFill(id int) error {
@@ -301,6 +339,7 @@ func (r *GridLevelRepository) ProcessSellFill(id int) error {
 
 	result, err := tx.Exec(query, models.StateReady, id, models.StateSellActive)
 	if err != nil {
+		log.Printf("ERROR: Failed to process sell fill for level %d: %v", id, err)
 		return err
 	}
 
@@ -310,10 +349,17 @@ func (r *GridLevelRepository) ProcessSellFill(id int) error {
 	}
 
 	if rowsAffected == 0 {
+		log.Printf("WARNING: Level %d not in SELL_ACTIVE state, skipping sell fill processing", id)
 		return nil
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		log.Printf("ERROR: Failed to commit sell fill for level %d: %v", id, err)
+		return err
+	}
+
+	log.Printf("INFO: Level %d → READY (cycle complete), cleared filled_amount and sell_order_id", id)
+	return nil
 }
 
 func (r *GridLevelRepository) TryStartBuyOrder(id int) (bool, error) {
@@ -331,6 +377,7 @@ func (r *GridLevelRepository) TryStartBuyOrder(id int) (bool, error) {
 
 	result, err := tx.Exec(query, models.StatePlacingBuy, id, models.StateReady)
 	if err != nil {
+		log.Printf("ERROR: Failed to try start buy order for level %d: %v", id, err)
 		return false, err
 	}
 
@@ -343,7 +390,13 @@ func (r *GridLevelRepository) TryStartBuyOrder(id int) (bool, error) {
 		return false, nil
 	}
 
-	return true, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		log.Printf("ERROR: Failed to commit start buy order for level %d: %v", id, err)
+		return false, err
+	}
+
+	log.Printf("INFO: Level %d → PLACING_BUY", id)
+	return true, nil
 }
 
 func (r *GridLevelRepository) TryStartSellOrder(id int) (bool, error) {
@@ -361,6 +414,7 @@ func (r *GridLevelRepository) TryStartSellOrder(id int) (bool, error) {
 
 	result, err := tx.Exec(query, models.StatePlacingSell, id, models.StateHolding)
 	if err != nil {
+		log.Printf("ERROR: Failed to try start sell order for level %d: %v", id, err)
 		return false, err
 	}
 
@@ -373,7 +427,13 @@ func (r *GridLevelRepository) TryStartSellOrder(id int) (bool, error) {
 		return false, nil
 	}
 
-	return true, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		log.Printf("ERROR: Failed to commit start sell order for level %d: %v", id, err)
+		return false, err
+	}
+
+	log.Printf("INFO: Level %d → PLACING_SELL", id)
+	return true, nil
 }
 
 func (r *GridLevelRepository) Create(level *models.GridLevel) error {

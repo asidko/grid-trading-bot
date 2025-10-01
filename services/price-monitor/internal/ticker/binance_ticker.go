@@ -37,6 +37,8 @@ func NewBinanceTicker() *BinanceTicker {
 
 // GetPrices fetches current prices for multiple symbols
 func (bt *BinanceTicker) GetPrices(symbols []string) (map[string]decimal.Decimal, error) {
+	log.Printf("INFO: Fetching prices for %d symbols from Binance", len(symbols))
+
 	// Normalize symbols to uppercase
 	normalizedSymbols := make([]string, len(symbols))
 	for i, symbol := range symbols {
@@ -61,6 +63,7 @@ func (bt *BinanceTicker) GetPrices(symbols []string) (map[string]decimal.Decimal
 
 	resp, err := bt.client.Do(req)
 	if err != nil {
+		log.Printf("ERROR: Failed to fetch prices from Binance: %v", err)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
@@ -71,6 +74,7 @@ func (bt *BinanceTicker) GetPrices(symbols []string) (map[string]decimal.Decimal
 	}
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("ERROR: Binance API error %d: %s", resp.StatusCode, body)
 		return nil, fmt.Errorf("binance API error %d: %s", resp.StatusCode, body)
 	}
 
@@ -89,14 +93,14 @@ func (bt *BinanceTicker) GetPrices(symbols []string) (map[string]decimal.Decimal
 	for _, ticker := range tickers {
 		price, err := decimal.NewFromString(ticker.Price)
 		if err != nil {
-			log.Printf("Warning: invalid price for %s: %s (error: %v)",
-				ticker.Symbol, ticker.Price, err)
+			log.Printf("WARNING: Invalid price for %s: %s (error: %v)", ticker.Symbol, ticker.Price, err)
 			continue
 		}
 
 		result[ticker.Symbol] = price
 	}
 
+	log.Printf("INFO: Fetched %d prices from Binance", len(result))
 	return result, nil
 }
 

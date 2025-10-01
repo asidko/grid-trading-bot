@@ -87,15 +87,14 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 		// Round up to step size
 		quantity = bc.roundUpToStepSize(minQuantityNeeded, info.StepSize)
 		notional = price.Mul(quantity)
-		log.Printf("Adjusted quantity from %s to %s to meet minimum notional of %s",
-			originalQuantity, quantity, info.MinNotional)
+		log.Printf("INFO: Adjusted quantity %s → %s to meet min notional %s (notional was %s, now %s)",
+			originalQuantity, quantity, info.MinNotional, price.Mul(originalQuantity), notional)
 	}
 
 	// Adjust for minimum quantity restriction
 	if quantity.LessThan(info.MinQty) {
+		log.Printf("INFO: Adjusted quantity %s → %s to meet min quantity requirement", originalQuantity, info.MinQty)
 		quantity = info.MinQty
-		log.Printf("Adjusted quantity from %s to %s to meet minimum quantity requirement",
-			originalQuantity, quantity)
 	}
 
 	// Check maximum quantity restriction (this one we can't adjust)
@@ -106,10 +105,14 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 	// Check cache for idempotency
 	cacheKey := bc.createCacheKey(symbol, side, price, quantity)
 	if existingOrder := bc.getFromCache(cacheKey); existingOrder != nil {
+		log.Printf("INFO: Cache hit for order - Symbol: %s, Side: %s, Price: %s, Qty: %s, Existing Order: %d",
+			symbol, side, price, quantity, existingOrder.OrderID)
 		currentOrder, err := bc.GetOrder(symbol, strconv.FormatInt(existingOrder.OrderID, 10))
 		if err == nil && currentOrder != nil && (currentOrder.Status == "NEW" || currentOrder.Status == "PARTIALLY_FILLED") {
+			log.Printf("INFO: Reusing existing order %d (status: %s) - idempotent placement", existingOrder.OrderID, currentOrder.Status)
 			return currentOrder, nil
 		}
+		log.Printf("WARNING: Cached order %d no longer valid, placing new order", existingOrder.OrderID)
 	}
 
 	params := url.Values{}
@@ -175,6 +178,8 @@ func (bc *BinanceClient) PlaceOrder(symbol string, side models.OrderSide, price,
 
 	// Store in cache
 	bc.storeInCache(cacheKey, &order)
+	log.Printf("SUCCESS: Placed order on Binance - Order ID: %d, Symbol: %s, Side: %s, Price: %s, Qty: %s",
+		order.OrderID, symbol, side, price, quantity)
 
 	return &order, nil
 }
@@ -225,7 +230,7 @@ func (bc *BinanceClient) GetOrder(symbol, orderID string) (*models.BinanceOrder,
 
 	// If not found, fallback to allOrders (searches recent 7 days)
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusBadRequest {
-		log.Printf("Order %s not found in /api/v3/order, trying /api/v3/allOrders", orderID)
+		log.Printf("INFO: Order %s not found in /api/v3/order, falling back to /api/v3/allOrders", orderID)
 		return bc.getOrderFromAllOrders(symbol, orderID)
 	}
 
@@ -284,10 +289,12 @@ func (bc *BinanceClient) getOrderFromAllOrders(symbol, orderID string) (*models.
 	// Find order with matching ID
 	for i := range orders {
 		if orders[i].OrderID == targetOrderID {
+			log.Printf("INFO: Found order %s in allOrders - Status: %s", orderID, orders[i].Status)
 			return &orders[i], nil
 		}
 	}
 
+	log.Printf("WARNING: Order %s not found in recent 500 orders for %s", orderID, symbol)
 	return nil, nil
 }
 
@@ -430,9 +437,12 @@ func (bc *BinanceClient) getSymbolInfo(symbol string) (*SymbolInfo, error) {
 	bc.symbolInfoMutex.RLock()
 	if info, ok := bc.symbolInfo[symbol]; ok && time.Since(bc.symbolInfoTime) < 24*time.Hour {
 		bc.symbolInfoMutex.RUnlock()
+		log.Printf("DEBUG: Symbol info cache hit for %s (age: %v)", symbol, time.Since(bc.symbolInfoTime))
 		return info, nil
 	}
 	bc.symbolInfoMutex.RUnlock()
+
+	log.Printf("INFO: Fetching symbol info from Binance for %s", symbol)
 
 	// Fetch exchange info
 	req, err := http.NewRequest("GET", bc.baseURL+"/api/v3/exchangeInfo?symbol="+symbol, nil)
@@ -524,6 +534,9 @@ func (bc *BinanceClient) getSymbolInfo(symbol string) (*SymbolInfo, error) {
 	bc.symbolInfo[symbol] = info
 	bc.symbolInfoTime = time.Now()
 	bc.symbolInfoMutex.Unlock()
+
+	log.Printf("INFO: Cached symbol info for %s - MinQty: %s, MinNotional: %s, StepSize: %s",
+		symbol, info.MinQty, info.MinNotional, info.StepSize)
 
 	return info, nil
 }

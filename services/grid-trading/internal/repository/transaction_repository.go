@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"log"
 
 	"github.com/grid-trading-bot/services/grid-trading/internal/models"
 	"github.com/shopspring/decimal"
@@ -40,6 +41,12 @@ func (r *TransactionRepository) RecordBuyPlaced(
 		amountUSDT,
 	)
 
+	if err != nil {
+		log.Printf("ERROR: Failed to record BUY PLACED transaction for level %d: %v", gridLevelID, err)
+	} else {
+		log.Printf("INFO: Recorded BUY PLACED - Level: %d, Order: %s, Target: %s, Amount: %s USDT", gridLevelID, orderID, targetPrice, amountUSDT)
+	}
+
 	return err
 }
 
@@ -67,6 +74,12 @@ func (r *TransactionRepository) RecordSellPlaced(
 		targetPrice,
 		amountCoin,
 	)
+
+	if err != nil {
+		log.Printf("ERROR: Failed to record SELL PLACED transaction for level %d: %v", gridLevelID, err)
+	} else {
+		log.Printf("INFO: Recorded SELL PLACED - Level: %d, Order: %s, Target: %s, Amount: %s coins", gridLevelID, orderID, targetPrice, amountCoin)
+	}
 
 	return err
 }
@@ -103,6 +116,13 @@ func (r *TransactionRepository) RecordBuyFilled(
 		amountUSDT,
 	).Scan(&txID)
 
+	if err != nil {
+		log.Printf("ERROR: Failed to record BUY FILLED transaction for level %d: %v", gridLevelID, err)
+	} else {
+		log.Printf("INFO: Recorded BUY FILLED (tx %d) - Level: %d, Order: %s, Executed: %s (target: %s), Amount: %s coins = %s USDT",
+			txID, gridLevelID, orderID, executedPrice, targetPrice, amountCoin, amountUSDT)
+	}
+
 	return err
 }
 
@@ -125,9 +145,11 @@ func (r *TransactionRepository) RecordSellFilled(
 			amount_coin, amount_usdt,
 			related_buy_id, profit_usdt, profit_pct
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		RETURNING id
 	`
 
-	_, err := r.db.Exec(
+	var txID int
+	err := r.db.QueryRow(
 		query,
 		gridLevelID,
 		symbol,
@@ -141,7 +163,19 @@ func (r *TransactionRepository) RecordSellFilled(
 		relatedBuyID,
 		profitUSDT,
 		profitPct,
-	)
+	).Scan(&txID)
+
+	if err != nil {
+		log.Printf("ERROR: Failed to record SELL FILLED transaction for level %d: %v", gridLevelID, err)
+	} else {
+		if relatedBuyID > 0 {
+			log.Printf("INFO: Recorded SELL FILLED (tx %d) - Level: %d, Order: %s, Executed: %s (target: %s), Amount: %s coins = %s USDT, Related Buy: %d, Profit: %s USDT (%s%%)",
+				txID, gridLevelID, orderID, executedPrice, targetPrice, amountCoin, amountUSDT, relatedBuyID, profitUSDT, profitPct)
+		} else {
+			log.Printf("INFO: Recorded SELL FILLED (tx %d) - Level: %d, Order: %s, Executed: %s (target: %s), Amount: %s coins = %s USDT (no related buy)",
+				txID, gridLevelID, orderID, executedPrice, targetPrice, amountCoin, amountUSDT)
+		}
+	}
 
 	return err
 }
@@ -192,7 +226,7 @@ func (r *TransactionRepository) recordError(
 		)
 	`
 
-	_, err := r.db.Exec(
+	result, err := r.db.Exec(
 		query,
 		gridLevelID,
 		symbol,
@@ -202,6 +236,18 @@ func (r *TransactionRepository) recordError(
 		errorCode,
 		errorMsg,
 	)
+
+	if err != nil {
+		log.Printf("ERROR: Failed to record %s ERROR transaction for level %d: %v", side, gridLevelID, err)
+	} else {
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected > 0 {
+			log.Printf("WARNING: Recorded %s ERROR - Level: %d, Target: %s, Code: %s, Message: %s",
+				side, gridLevelID, targetPrice, errorCode, errorMsg)
+		} else {
+			log.Printf("DEBUG: Duplicate %s ERROR for level %d within 1 hour, skipped recording", side, gridLevelID)
+		}
+	}
 
 	return err
 }

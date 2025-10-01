@@ -30,16 +30,20 @@ func (s *OrderService) PlaceOrder(req models.OrderRequest) (*models.OrderRespons
 	if req.Side == models.SideBuy {
 		// For buy orders, amount is in USDT, need to convert to coin quantity
 		quantity = req.Amount.Div(req.Price)
+		log.Printf("INFO: Converting buy amount - %s USDT @ %s = %s coins", req.Amount, req.Price, quantity)
 	}
+
+	log.Printf("INFO: Placing order - Symbol: %s, Side: %s, Price: %s, Quantity: %s", req.Symbol, req.Side, req.Price, quantity)
 
 	// Place order on Binance (idempotent via cache)
 	binanceOrder, err := s.binance.PlaceOrder(req.Symbol, req.Side, req.Price, quantity)
 	if err != nil {
-		// Log the details for debugging
-		log.Printf("Order placement failed - Symbol: %s, Side: %s, Price: %s, Quantity: %s, Error: %v",
+		log.Printf("ERROR: Order placement failed - Symbol: %s, Side: %s, Price: %s, Quantity: %s, Error: %v",
 			req.Symbol, req.Side, req.Price, quantity, err)
 		return nil, fmt.Errorf("failed to place order on Binance: %w", err)
 	}
+
+	log.Printf("SUCCESS: Order assured - Order ID: %s, Symbol: %s, Side: %s", strconv.FormatInt(binanceOrder.OrderID, 10), req.Symbol, req.Side)
 
 	return &models.OrderResponse{
 		OrderID: strconv.FormatInt(binanceOrder.OrderID, 10),
@@ -55,16 +59,16 @@ func (s *OrderService) GetOrderStatus(symbol, orderID string) (*models.OrderStat
 func (s *OrderService) fetchOrderStatus(symbol, orderID string) (*models.OrderStatus, error) {
 	binanceOrder, err := s.binance.GetOrder(symbol, orderID)
 	if err != nil {
+		log.Printf("ERROR: Failed to fetch order status for %s: %v", orderID, err)
 		return nil, err
 	}
 
 	if binanceOrder == nil {
+		log.Printf("WARNING: Order %s not found on Binance", orderID)
 		return nil, nil
 	}
 
-	// Convert status
 	status := exchange.ConvertBinanceStatus(binanceOrder.Status)
-
 	result := &models.OrderStatus{
 		OrderID: orderID,
 		Status:  status,
@@ -83,6 +87,9 @@ func (s *OrderService) fetchOrderStatus(symbol, orderID string) (*models.OrderSt
 
 		result.FilledAmount = &executedQty
 		result.FillPrice = &fillPrice
+
+		log.Printf("INFO: Order %s filled - Executed: %s @ %s (Quote: %s)",
+			orderID, executedQty, fillPrice, cummulativeQuoteQty)
 
 		// Send fill notification
 		s.sendFillNotification(binanceOrder, executedQty, fillPrice)
@@ -104,7 +111,10 @@ func (s *OrderService) sendFillNotification(order *models.BinanceOrder, filledAm
 	}
 
 	if err := s.gridClient.SendFillNotification(notification); err != nil {
-		log.Printf("Failed to send fill notification for order %d: %v", order.OrderID, err)
+		log.Printf("ERROR: Failed to send fill notification for order %d: %v", order.OrderID, err)
+	} else {
+		log.Printf("INFO: Sent fill notification - Order: %d, Symbol: %s, Side: %s, Amount: %s @ %s",
+			order.OrderID, notification.Symbol, order.Side, filledAmount, fillPrice)
 	}
 }
 
