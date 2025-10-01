@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	"github.com/grid-trading-bot/services/grid-trading/internal/models"
 	"github.com/shopspring/decimal"
@@ -266,19 +267,24 @@ func (r *TransactionRepository) GetLastBuyForLevel(gridLevelID int) (*models.Tra
 	`
 
 	tx := &models.Transaction{}
+	var createdAtStr string
 	err := r.db.QueryRow(query, gridLevelID, models.SideBuy, models.StatusFilled).Scan(
 		&tx.ID, &tx.GridLevelID, &tx.Symbol, &tx.Side, &tx.Status,
 		&tx.OrderID, &tx.TargetPrice, &tx.ExecutedPrice,
 		&tx.AmountCoin, &tx.AmountUSDT,
 		&tx.RelatedBuyID, &tx.ProfitUSDT, &tx.ProfitPct,
-		&tx.ErrorCode, &tx.ErrorMsg, &tx.CreatedAt,
+		&tx.ErrorCode, &tx.ErrorMsg, &createdAtStr,
 	)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
 
-	return tx, err
+	tx.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAtStr)
+	return tx, nil
 }
 
 func (r *TransactionRepository) GetDailyStats() (buys, sells, errors int, profit decimal.Decimal, err error) {
@@ -345,19 +351,24 @@ func (r *TransactionRepository) GetLastBuy() (*models.Transaction, error) {
 	`
 
 	tx := &models.Transaction{}
+	var createdAtStr string
 	err := r.db.QueryRow(query).Scan(
 		&tx.ID, &tx.GridLevelID, &tx.Symbol, &tx.Side, &tx.Status,
 		&tx.OrderID, &tx.TargetPrice, &tx.ExecutedPrice,
 		&tx.AmountCoin, &tx.AmountUSDT,
 		&tx.RelatedBuyID, &tx.ProfitUSDT, &tx.ProfitPct,
-		&tx.ErrorCode, &tx.ErrorMsg, &tx.CreatedAt,
+		&tx.ErrorCode, &tx.ErrorMsg, &createdAtStr,
 	)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
 
-	return tx, err
+	tx.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAtStr)
+	return tx, nil
 }
 
 func (r *TransactionRepository) GetLastSell() (*models.Transaction, error) {
@@ -374,17 +385,22 @@ func (r *TransactionRepository) GetLastSell() (*models.Transaction, error) {
 	`
 
 	tx := &models.Transaction{}
+	var createdAtStr string
 	err := r.db.QueryRow(query).Scan(
 		&tx.ID, &tx.GridLevelID, &tx.Symbol, &tx.Side, &tx.Status,
 		&tx.OrderID, &tx.TargetPrice, &tx.ExecutedPrice,
 		&tx.AmountCoin, &tx.AmountUSDT,
 		&tx.RelatedBuyID, &tx.ProfitUSDT, &tx.ProfitPct,
-		&tx.ErrorCode, &tx.ErrorMsg, &tx.CreatedAt,
+		&tx.ErrorCode, &tx.ErrorMsg, &createdAtStr,
 	)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
+	if err != nil {
+		return nil, err
+	}
 
-	return tx, err
+	tx.CreatedAt, _ = time.Parse("2006-01-02 15:04:05", createdAtStr)
+	return tx, nil
 }

@@ -617,30 +617,35 @@ func (s *GridService) GetStatus() (*StatusResponse, error) {
 	// Get daily stats
 	buys, sells, errors, profitToday, err := s.txRepo.GetDailyStats()
 	if err != nil {
+		log.Printf("ERROR: GetStatus - GetDailyStats failed: %v", err)
 		return nil, fmt.Errorf("failed to get daily stats: %w", err)
 	}
 
 	// Get profit stats
 	_, profitWeek, profitMonth, profitAllTime, err := s.txRepo.GetProfitStats()
 	if err != nil {
+		log.Printf("ERROR: GetStatus - GetProfitStats failed: %v", err)
 		return nil, fmt.Errorf("failed to get profit stats: %w", err)
 	}
 
 	// Get last buy
 	lastBuyTx, err := s.txRepo.GetLastBuy()
 	if err != nil {
+		log.Printf("ERROR: GetStatus - GetLastBuy failed: %v", err)
 		return nil, fmt.Errorf("failed to get last buy: %w", err)
 	}
 
 	// Get last sell
 	lastSellTx, err := s.txRepo.GetLastSell()
 	if err != nil {
+		log.Printf("ERROR: GetStatus - GetLastSell failed: %v", err)
 		return nil, fmt.Errorf("failed to get last sell: %w", err)
 	}
 
 	// Get level counts
 	holding, ready, err := s.repo.GetLevelCounts()
 	if err != nil {
+		log.Printf("ERROR: GetStatus - GetLevelCounts failed: %v", err)
 		return nil, fmt.Errorf("failed to get level counts: %w", err)
 	}
 
