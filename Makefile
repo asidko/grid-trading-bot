@@ -87,7 +87,7 @@ status:
 	[ -z "$$data" ] && echo "✗ Service unavailable" && exit 1; \
 	echo "\n📊 Activity: $$(echo $$data | jq -r '.buys_today') buys, $$(echo $$data | jq -r '.sells_today') sells, $$(echo $$data | jq -r '.errors_today') errors"; \
 	echo "💰 Profit: $$(echo $$data | jq -r '.profit_today') today | $$(echo $$data | jq -r '.profit_this_week') week | $$(echo $$data | jq -r '.profit_this_month') month | $$(echo $$data | jq -r '.profit_all_time') total (USDT)"; \
-	echo "📈 Levels: $$(echo $$data | jq -r '.levels_holding') holding, $$(echo $$data | jq -r '.levels_ready') ready"; \
+	echo "📈 Levels: $$(echo $$data | jq -r '.waiting_for_buy') waiting for buy, $$(echo $$data | jq -r '.waiting_for_sell') waiting for sell"; \
 	echo $$data | jq -e '.last_buy' > /dev/null 2>&1 && [ "$$(echo $$data | jq -r '.last_buy')" != "null" ] && { \
 		echo "\n🟢 Last Buy: $$(echo $$data | jq -r '.last_buy.symbol') @ $$(echo $$data | jq -r '.last_buy.price')"; \
 		echo "   Amount: $$(echo $$data | jq -r '.last_buy.amount') | Time: $$(echo $$data | jq -r '.last_buy.time')"; \

@@ -572,8 +572,8 @@ type StatusResponse struct {
 	LastBuy           *TransactionInfo   `json:"last_buy,omitempty"`
 	LastSell          *TransactionInfo   `json:"last_sell,omitempty"`
 	LastPriceUpdate   *PriceUpdateInfo   `json:"last_price_update,omitempty"`
-	LevelsHolding     int                `json:"levels_holding"`
-	LevelsReady       int                `json:"levels_ready"`
+	WaitingForBuy     int                `json:"waiting_for_buy"`
+	WaitingForSell    int                `json:"waiting_for_sell"`
 	ErrorsToday       int                `json:"errors_today"`
 }
 
@@ -645,8 +645,8 @@ func (s *GridService) GetStatus() (*StatusResponse, error) {
 		ProfitThisMonth: profitMonth,
 		ProfitAllTime:   profitAllTime,
 		LastPriceUpdate: lastPriceUpdate,
-		LevelsHolding:   holding,
-		LevelsReady:     ready,
+		WaitingForBuy:   ready,
+		WaitingForSell:  holding,
 		ErrorsToday:     errors,
 	}
 
