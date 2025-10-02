@@ -40,6 +40,19 @@ levels:
 	@echo ""
 	@echo "  Trading pair (e.g., ETHUSDT, BTCUSDT):"
 	@read -p "  Symbol [ETHUSDT]: " symbol; \
+	symbol=$${symbol:-ETHUSDT}; \
+	if ! echo "$$symbol" | grep -qE "(USDT)$$"; then \
+		echo ""; \
+		echo "  ⚠️  WARNING: Symbol '$$symbol' you provided does not end with USDT"; \
+		echo "  ⚠️  The symbol may also not be found or supported on Binance."; \
+		echo "  ⚠️  Valid examples: BTCUSDT, ETHUSDT, XRPUSDT, etc..."; \
+		echo ""; \
+		read -p "  Continue anyway? [y/N]: " confirm; \
+		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
+			echo "  ✗ Grid creation cancelled"; \
+			exit 1; \
+		fi; \
+	fi; \
 	echo ""; \
 	echo "  Lower price boundary for grid:"; \
 	read -p "  Min price [3500]: " min_price; \
@@ -52,7 +65,6 @@ levels:
 	echo ""; \
 	echo "  USDT amount to buy at each level:"; \
 	read -p "  Buy amount USDT [1000]: " buy_amount; \
-	symbol=$${symbol:-ETHUSDT}; \
 	min_price=$${min_price:-3500}; \
 	max_price=$${max_price:-4500}; \
 	grid_step=$${grid_step:-200}; \
