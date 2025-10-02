@@ -80,6 +80,9 @@ calc:
 	printf "\nStep: %s | Profit: %.2f USDT (%.2f%%)\n\n" $$step $$profit $$pct
 
 status:
+	@curl -s -f -o /dev/null http://localhost:8080/health || { echo "\n❌ grid-trading service is not running (port 8080)"; echo "⚠️  Please run 'make up' to start services\n"; exit 1; }
+	@curl -s -f -o /dev/null http://localhost:9090/health || { echo "\n❌ order-assurance service is not running (port 9090)"; echo "⚠️  Please run 'make up' to start services\n"; exit 1; }
+	@curl -s -f -o /dev/null http://localhost:7070/health || { echo "\n❌ price-monitor service is not running (port 7070)"; echo "⚠️  Please run 'make up' to start services\n"; exit 1; }
 	@echo "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 	@echo "Grid Trading Status"
 	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

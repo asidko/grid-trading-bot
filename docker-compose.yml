@@ -17,6 +17,7 @@ services:
       TRADING_FEE: ${TRADING_FEE}
     depends_on:
       - order-assurance
+    restart: unless-stopped
 
   # Order Assurance Service
   order-assurance:
@@ -30,6 +31,7 @@ services:
       BINANCE_API_KEY: ${BINANCE_API_KEY}
       BINANCE_API_SECRET: ${BINANCE_API_SECRET}
       GRID_TRADING_URL: ${GRID_TRADING_URL}
+    restart: unless-stopped
 
   # Price Monitor Service
   price-monitor:
@@ -45,6 +47,7 @@ services:
       TRIGGER_INTERVAL_MS: ${TRIGGER_INTERVAL_MS}
     depends_on:
       - grid-trading
+    restart: unless-stopped
 
 volumes:
   grid_data:
