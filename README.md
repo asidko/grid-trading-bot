@@ -13,14 +13,14 @@ Grid trading splits a price range into levels. The bot automatically buys when p
 
 Each level operates independently, generating profits from price movements in both directions.
 
-More: **[IDEA.md](IDEA.md)** - Strategy concept
+👉 More: **[IDEA.md](IDEA.md)** - Strategy concept
 
 ## Setup
 
 ### Prerequisites
 
+- Server with Linux and fixed IP address (to whitelist in Binance)
 - Docker & Docker Compose
-- Binance account with [API keys](https://www.binance.com/en/my/settings/api-management)
 - USDT in Binance Spot account
 
 ### Clone the project
@@ -39,6 +39,7 @@ make init
 Edit `.env` with your Binance API credentials:
 - `BINANCE_API_KEY` - Your API key (required)
 - `BINANCE_API_SECRET` - Your API secret (required)
+- Link: https://www.binance.com/en/my/settings/api-management. Make sure to enable Spot Trading permissions (you have also provide your IP to allow this option).
 
 ### Start Services
 
@@ -111,41 +112,15 @@ Shows your trading performance:
 make logs
 
 # Stop services
-make down
-
-# Stop and remove all data
-# ⚠️ Use only for testing
-make clean
+make stop
 ```
 
-## Advanced Configuration
+### Cleanup
 
-Essential settings in `.env`:
+```bash
+# Stop and remove containers
+make down
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `BINANCE_API_KEY` | Binance API key | *required* |
-| `BINANCE_API_SECRET` | Binance API secret | *required* |
-| `PRICE_CHECK_INTERVAL_MS` | Price check frequency | 10000 (10s) |
-| `TRIGGER_INTERVAL_MS` | Min time between triggers | 5000 (5s) |
-
-<details>
-<summary>All Configuration Options</summary>
-
-**Service Ports**:
-- `GRID_PORT=8080`
-- `ASSURANCE_PORT=9090`
-- `MONITOR_PORT=7070`
-
-**Database**:
-- `DB_PATH=/data/grid_trading.db` - SQLite database file path 
-
-**Internal URLs**:
-- `ORDER_ASSURANCE_URL=http://localhost:9090`
-- `GRID_TRADING_URL=http://localhost:8080`
-
-**Recovery**:
-- `SYNC_JOB_ENABLED=true` - Hourly order sync
-- `SYNC_JOB_CRON=0 * * * *` - Cron schedule
-
-</details>
+# Remove database data (⚠️ all data lost)
+rm -rf .grid-trading-data
+```   

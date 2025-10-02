@@ -18,9 +18,6 @@ stop:
 logs:
 	docker compose logs -f
 
-clean:
-	docker compose down -v
-
 build:
 	go build -o bin/grid-trading services/grid-trading/cmd/main.go
 	go build -o bin/order-assurance services/order-assurance/cmd/main.go
