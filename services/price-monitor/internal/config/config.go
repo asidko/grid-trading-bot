@@ -10,7 +10,6 @@ type Config struct {
 	ServerPort           string
 	GridTradingURL       string
 	PriceCheckIntervalMs int
-	TriggerIntervalMs    int
 	MinPriceChangePct    float64
 }
 
@@ -31,11 +30,6 @@ func LoadConfig() *Config {
 		priceCheckIntervalStr = "10000" // Default to 10 seconds
 	}
 
-	triggerIntervalStr := os.Getenv("TRIGGER_INTERVAL_MS")
-	if triggerIntervalStr == "" {
-		triggerIntervalStr = "5000" // Default to 5 seconds
-	}
-
 	minPriceChangeStr := os.Getenv("MIN_PRICE_CHANGE_PCT")
 	if minPriceChangeStr == "" {
 		minPriceChangeStr = "0.01" // Default to 0.01%
@@ -44,11 +38,6 @@ func LoadConfig() *Config {
 	priceCheckInterval, err := strconv.Atoi(priceCheckIntervalStr)
 	if err != nil || priceCheckInterval <= 0 {
 		log.Fatal("PRICE_CHECK_INTERVAL_MS must be a positive integer")
-	}
-
-	triggerInterval, err := strconv.Atoi(triggerIntervalStr)
-	if err != nil || triggerInterval <= 0 {
-		log.Fatal("TRIGGER_INTERVAL_MS must be a positive integer")
 	}
 
 	minPriceChange, err := strconv.ParseFloat(minPriceChangeStr, 64)
@@ -60,7 +49,6 @@ func LoadConfig() *Config {
 		ServerPort:           serverPort,
 		GridTradingURL:       gridTradingURL,
 		PriceCheckIntervalMs: priceCheckInterval,
-		TriggerIntervalMs:    triggerInterval,
 		MinPriceChangePct:    minPriceChange,
 	}
 }

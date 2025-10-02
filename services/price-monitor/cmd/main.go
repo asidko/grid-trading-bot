@@ -143,13 +143,6 @@ func (pm *PriceMonitor) handlePriceUpdate(symbol string, price decimal.Decimal) 
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	// Check if we should throttle this update
-	if lastTime, ok := pm.lastTrigger[symbol]; ok {
-		if time.Since(lastTime) < time.Duration(pm.cfg.TriggerIntervalMs)*time.Millisecond {
-			return // Skip - too soon
-		}
-	}
-
 	// Check if price changed significantly
 	if lastPrice, ok := pm.lastPrice[symbol]; ok {
 		change := price.Sub(lastPrice).Abs().Div(lastPrice).Mul(decimal.NewFromInt(100))

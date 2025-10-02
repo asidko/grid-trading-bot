@@ -43,7 +43,8 @@ services:
     environment:
       SERVER_PORT: ${MONITOR_PORT}
       GRID_TRADING_URL: ${GRID_TRADING_URL}
-      TRIGGER_INTERVAL_MS: ${TRIGGER_INTERVAL_MS}
+      PRICE_CHECK_INTERVAL_MS: ${PRICE_CHECK_INTERVAL_MS}
+      MIN_PRICE_CHANGE_PCT: ${MIN_PRICE_CHANGE_PCT}
     depends_on:
       - grid-trading
     restart: unless-stopped
