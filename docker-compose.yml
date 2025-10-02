@@ -43,7 +43,6 @@ services:
     environment:
       SERVER_PORT: ${MONITOR_PORT}
       GRID_TRADING_URL: ${GRID_TRADING_URL}
-      MONITORED_SYMBOLS: ${MONITORED_SYMBOLS}
       TRIGGER_INTERVAL_MS: ${TRIGGER_INTERVAL_MS}
     depends_on:
       - grid-trading

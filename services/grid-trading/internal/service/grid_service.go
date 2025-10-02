@@ -120,6 +120,23 @@ func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) 
 
 	// Place new orders based on price triggers
 	activatedCount := 0
+	checkedLevels := len(levels)
+
+	// Calculate price range for better logging
+	var minBuyPrice, maxSellPrice decimal.Decimal
+	if len(levels) > 0 {
+		minBuyPrice = levels[0].BuyPrice
+		maxSellPrice = levels[0].SellPrice
+		for _, level := range levels {
+			if level.BuyPrice.LessThan(minBuyPrice) {
+				minBuyPrice = level.BuyPrice
+			}
+			if level.SellPrice.GreaterThan(maxSellPrice) {
+				maxSellPrice = level.SellPrice
+			}
+		}
+	}
+
 	for _, level := range levels {
 		if level.CanPlaceBuy(price) {
 			log.Printf("INFO: Price %s triggered BUY level %d (target: %s)", price, level.ID, level.BuyPrice)
@@ -139,7 +156,11 @@ func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) 
 	}
 
 	if activatedCount > 0 {
-		log.Printf("INFO: Successfully activated %d orders for %s", activatedCount, symbol)
+		log.Printf("INFO: Successfully activated %d/%d orders for %s at price %s", activatedCount, checkedLevels, symbol, price)
+	} else if len(levels) > 0 {
+		log.Printf("DEBUG: No orders activated for %s at price %s (checked %d levels, range [%s - %s])", symbol, price, checkedLevels, minBuyPrice, maxSellPrice)
+	} else {
+		log.Printf("DEBUG: No orders activated for %s at price %s (no levels configured)", symbol, price)
 	}
 
 	return nil
@@ -148,10 +169,12 @@ func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) 
 func (s *GridService) tryPlaceBuyOrder(level *models.GridLevel) error {
 	started, err := s.repo.TryStartBuyOrder(level.ID)
 	if err != nil {
+		log.Printf("ERROR: Failed to start buy order for level %d: %v", level.ID, err)
 		return fmt.Errorf("failed to start buy order: %w", err)
 	}
 
 	if !started {
+		log.Printf("DEBUG: Level %d buy order skipped (race condition or already in progress)", level.ID)
 		return nil
 	}
 
@@ -190,14 +213,17 @@ func (s *GridService) tryPlaceBuyOrder(level *models.GridLevel) error {
 func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 	started, err := s.repo.TryStartSellOrder(level.ID)
 	if err != nil {
+		log.Printf("ERROR: Failed to start sell order for level %d: %v", level.ID, err)
 		return fmt.Errorf("failed to start sell order: %w", err)
 	}
 
 	if !started {
+		log.Printf("DEBUG: Level %d sell order skipped (race condition or already in progress)", level.ID)
 		return nil
 	}
 
 	if !level.FilledAmount.Valid {
+		log.Printf("ERROR: Level %d has no filled amount, cannot place sell order", level.ID)
 		s.repo.UpdateState(level.ID, models.StateHolding)
 		return fmt.Errorf("no filled amount for level %d", level.ID)
 	}
@@ -221,6 +247,7 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 	}
 
 	if err := s.repo.UpdateSellOrderPlaced(level.ID, orderResp.OrderID); err != nil {
+		log.Printf("ERROR: Failed to update database for sell order %s: %v", orderResp.OrderID, err)
 		return fmt.Errorf("failed to update sell order placed: %w", err)
 	}
 
@@ -236,16 +263,17 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount, fillPrice decimal.Decimal) error {
 	level, err := s.repo.GetByBuyOrderID(orderID)
 	if err != nil {
+		log.Printf("ERROR: Failed to get level by buy order ID %s: %v", orderID, err)
 		return fmt.Errorf("failed to get level by buy order ID: %w", err)
 	}
 
 	if level == nil {
-		log.Printf("No level found for buy order %s", orderID)
+		log.Printf("WARNING: No level found for buy order %s (possibly old/deleted)", orderID)
 		return nil
 	}
 
 	if level.State != models.StateBuyActive {
-		log.Printf("Level %d not in BUY_ACTIVE state (current: %s), skipping", level.ID, level.State)
+		log.Printf("WARNING: Level %d not in BUY_ACTIVE state (current: %s) for buy order %s, skipping fill", level.ID, level.State, orderID)
 		return nil
 	}
 
@@ -284,16 +312,17 @@ func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount, f
 func (s *GridService) ProcessSellFillNotification(orderID string, filledAmount, fillPrice decimal.Decimal) error {
 	level, err := s.repo.GetBySellOrderID(orderID)
 	if err != nil {
+		log.Printf("ERROR: Failed to get level by sell order ID %s: %v", orderID, err)
 		return fmt.Errorf("failed to get level by sell order ID: %w", err)
 	}
 
 	if level == nil {
-		log.Printf("No level found for sell order %s", orderID)
+		log.Printf("WARNING: No level found for sell order %s (possibly old/deleted)", orderID)
 		return nil
 	}
 
 	if level.State != models.StateSellActive {
-		log.Printf("Level %d not in SELL_ACTIVE state (current: %s), skipping", level.ID, level.State)
+		log.Printf("WARNING: Level %d not in SELL_ACTIVE state (current: %s) for sell order %s, skipping fill", level.ID, level.State, orderID)
 		return nil
 	}
 
@@ -358,41 +387,53 @@ func (s *GridService) ProcessErrorNotification(orderID string, side string, erro
 	} else if side == "sell" {
 		level, err = s.repo.GetBySellOrderID(orderID)
 	} else {
+		log.Printf("ERROR: Invalid side '%s' for order %s in error notification", side, orderID)
 		return fmt.Errorf("invalid side: %s", side)
 	}
 
 	if err != nil {
+		log.Printf("ERROR: Failed to get level by %s order ID %s: %v", side, orderID, err)
 		return fmt.Errorf("failed to get level by order ID: %w", err)
 	}
 
 	if level == nil {
-		log.Printf("No level found for %s order %s", side, orderID)
+		log.Printf("WARNING: No level found for %s order %s (possibly old/deleted)", side, orderID)
 		return nil
 	}
 
+	log.Printf("ERROR: Order %s (%s) failed for level %d: %s", orderID, side, level.ID, errorMsg)
+
 	if err := s.repo.UpdateState(level.ID, models.StateError); err != nil {
+		log.Printf("ERROR: Failed to update level %d to ERROR state: %v", level.ID, err)
 		return fmt.Errorf("failed to update state to ERROR: %w", err)
 	}
 
 	// Record error transaction
 	if side == "buy" {
-		s.txRepo.RecordBuyError(level.ID, level.Symbol, level.BuyPrice, "order_error", errorMsg)
+		if err := s.txRepo.RecordBuyError(level.ID, level.Symbol, level.BuyPrice, "order_error", errorMsg); err != nil {
+			log.Printf("WARNING: Failed to record buy error transaction for level %d: %v", level.ID, err)
+		}
 	} else {
-		s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "order_error", errorMsg)
+		if err := s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "order_error", errorMsg); err != nil {
+			log.Printf("WARNING: Failed to record sell error transaction for level %d: %v", level.ID, err)
+		}
 	}
 
-	log.Printf("Level %d set to ERROR state: %s", level.ID, errorMsg)
+	log.Printf("INFO: Level %d set to ERROR state: %s", level.ID, errorMsg)
 	return nil
 }
 
 func (s *GridService) SyncOrders() error {
 	stuckLevels, err := s.repo.GetStuckInPlacingState(5 * time.Minute)
 	if err != nil {
+		log.Printf("ERROR: Failed to get stuck levels in sync job: %v", err)
 		return fmt.Errorf("failed to get stuck levels: %w", err)
 	}
 
+	log.Printf("INFO: Sync job checking %d stuck levels", len(stuckLevels))
+
 	for _, level := range stuckLevels {
-		log.Printf("Processing stuck level %d in state %s", level.ID, level.State)
+		log.Printf("INFO: Recovering stuck level %d in state %s", level.ID, level.State)
 
 		if level.State == models.StatePlacingBuy {
 			if level.BuyOrderID.Valid {
@@ -407,10 +448,10 @@ func (s *GridService) SyncOrders() error {
 				}
 				if orderResp, err := s.assurance.PlaceOrder(orderReq); err == nil {
 					s.repo.UpdateBuyOrderPlaced(level.ID, orderResp.OrderID)
-					log.Printf("Recovered buy order %s for level %d", orderResp.OrderID, level.ID)
+					log.Printf("SUCCESS: Recovered buy order %s for level %d", orderResp.OrderID, level.ID)
 				} else {
 					s.repo.UpdateState(level.ID, models.StateReady)
-					log.Printf("Failed to recover buy order for level %d: %v", level.ID, err)
+					log.Printf("ERROR: Failed to recover buy order for level %d: %v", level.ID, err)
 				}
 			}
 		} else if level.State == models.StatePlacingSell {
@@ -426,12 +467,13 @@ func (s *GridService) SyncOrders() error {
 				}
 				if orderResp, err := s.assurance.PlaceOrder(orderReq); err == nil {
 					s.repo.UpdateSellOrderPlaced(level.ID, orderResp.OrderID)
-					log.Printf("Recovered sell order %s for level %d", orderResp.OrderID, level.ID)
+					log.Printf("SUCCESS: Recovered sell order %s for level %d", orderResp.OrderID, level.ID)
 				} else {
 					s.repo.UpdateState(level.ID, models.StateHolding)
-					log.Printf("Failed to recover sell order for level %d: %v", level.ID, err)
+					log.Printf("ERROR: Failed to recover sell order for level %d: %v", level.ID, err)
 				}
 			} else {
+				log.Printf("WARNING: Level %d stuck in PLACING_SELL but no filled amount, resetting to HOLDING", level.ID)
 				s.repo.UpdateState(level.ID, models.StateHolding)
 			}
 		}
@@ -439,17 +481,23 @@ func (s *GridService) SyncOrders() error {
 
 	activeLevels, err := s.repo.GetAllActive()
 	if err != nil {
+		log.Printf("ERROR: Failed to get active levels in sync job: %v", err)
 		return fmt.Errorf("failed to get active levels: %w", err)
 	}
 
+	log.Printf("INFO: Sync job checking %d active levels", len(activeLevels))
+
 	for _, level := range activeLevels {
 		if level.State == models.StateBuyActive && level.BuyOrderID.Valid {
+			log.Printf("DEBUG: Checking buy order %s status for level %d", level.BuyOrderID.String, level.ID)
 			s.checkAndUpdateOrderStatus(level, level.BuyOrderID.String, true)
 		} else if level.State == models.StateSellActive && level.SellOrderID.Valid {
+			log.Printf("DEBUG: Checking sell order %s status for level %d", level.SellOrderID.String, level.ID)
 			s.checkAndUpdateOrderStatus(level, level.SellOrderID.String, false)
 		}
 	}
 
+	log.Printf("INFO: Sync job completed - checked %d stuck + %d active levels", len(stuckLevels), len(activeLevels))
 	return nil
 }
 
@@ -491,7 +539,13 @@ func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID
 		log.Printf("WARNING: Order %s cancelled on exchange, resetting level %d to %s", orderID, level.ID, targetState)
 		s.repo.UpdateState(level.ID, targetState)
 	case "open":
-		// Normal case - no logging needed to avoid flooding logs
+		side := "SELL"
+		targetPrice := level.SellPrice
+		if isBuy {
+			side = "BUY"
+			targetPrice = level.BuyPrice
+		}
+		log.Printf("DEBUG: Order %s (%s) still open on exchange - Level: %d, Symbol: %s, Target: %s", orderID, side, level.ID, level.Symbol, targetPrice)
 	default:
 		log.Printf("WARNING: Order %s has unknown status '%s' (level %d)", orderID, status.Status, level.ID)
 	}

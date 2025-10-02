@@ -37,8 +37,6 @@ func NewBinanceTicker() *BinanceTicker {
 
 // GetPrices fetches current prices for multiple symbols
 func (bt *BinanceTicker) GetPrices(symbols []string) (map[string]decimal.Decimal, error) {
-	log.Printf("INFO: Fetching prices for %d symbols from Binance", len(symbols))
-
 	// Normalize symbols to uppercase
 	normalizedSymbols := make([]string, len(symbols))
 	for i, symbol := range symbols {
@@ -100,7 +98,6 @@ func (bt *BinanceTicker) GetPrices(symbols []string) (map[string]decimal.Decimal
 		result[ticker.Symbol] = price
 	}
 
-	log.Printf("INFO: Fetched %d prices from Binance", len(result))
 	return result, nil
 }
 

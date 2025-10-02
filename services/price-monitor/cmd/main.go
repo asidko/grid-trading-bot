@@ -78,7 +78,6 @@ func (pm *PriceMonitor) refreshSymbols() error {
 	pm.lastSymbolsFetch = time.Now()
 	pm.mu.Unlock()
 
-	log.Printf("Monitoring symbols: %v", symbols)
 	return nil
 }
 

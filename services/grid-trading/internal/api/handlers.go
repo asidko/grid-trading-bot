@@ -68,14 +68,15 @@ type CreateGridRequest struct {
 func (h *Handlers) handlePriceTrigger(w http.ResponseWriter, r *http.Request) {
 	var req PriceTriggerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("ERROR: Invalid price trigger request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Received price trigger for %s at %s", req.Symbol, req.Price)
+	log.Printf("INFO: Price trigger received - Symbol: %s, Price: %s", req.Symbol, req.Price)
 
 	if err := h.gridService.ProcessPriceTrigger(req.Symbol, req.Price); err != nil {
-		log.Printf("Error processing price trigger: %v", err)
+		log.Printf("ERROR: Failed to process price trigger for %s @ %s: %v", req.Symbol, req.Price, err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -87,18 +88,20 @@ func (h *Handlers) handlePriceTrigger(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) handleFillNotification(w http.ResponseWriter, r *http.Request) {
 	var req FillNotificationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("ERROR: Invalid fill notification request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	log.Printf("INFO: Fill notification received - OrderID: %s, Symbol: %s, Side: %s, Status: %s, Price: %s, Filled: %s",
+		req.OrderID, req.Symbol, req.Side, req.Status, req.Price, req.FilledAmount)
+
 	if req.Status != "filled" {
+		log.Printf("INFO: Ignoring non-filled notification - OrderID: %s, Status: %s", req.OrderID, req.Status)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"status": "ignored"})
 		return
 	}
-
-	log.Printf("Received fill notification for order %s (%s %s at %s)",
-		req.OrderID, req.Side, req.Symbol, req.Price)
 
 	var err error
 	if req.Side == "buy" {
@@ -157,33 +160,39 @@ func (h *Handlers) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) handleCreateGrid(w http.ResponseWriter, r *http.Request) {
 	var req CreateGridRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("ERROR: Invalid grid creation request body: %v", err)
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	// Validate input
 	if req.Symbol == "" {
+		log.Printf("ERROR: Grid creation missing symbol")
 		http.Error(w, "Symbol is required", http.StatusBadRequest)
 		return
 	}
 	if req.MinPrice.LessThanOrEqual(decimal.Zero) || req.MaxPrice.LessThanOrEqual(decimal.Zero) {
+		log.Printf("ERROR: Grid creation invalid prices - min: %s, max: %s", req.MinPrice, req.MaxPrice)
 		http.Error(w, "Min and max prices must be positive", http.StatusBadRequest)
 		return
 	}
 	if req.MinPrice.GreaterThanOrEqual(req.MaxPrice) {
+		log.Printf("ERROR: Grid creation min >= max - min: %s, max: %s", req.MinPrice, req.MaxPrice)
 		http.Error(w, "Min price must be less than max price", http.StatusBadRequest)
 		return
 	}
 	if req.GridStep.LessThanOrEqual(decimal.Zero) {
+		log.Printf("ERROR: Grid creation invalid step: %s", req.GridStep)
 		http.Error(w, "Grid step must be positive", http.StatusBadRequest)
 		return
 	}
 	if req.BuyAmount.LessThanOrEqual(decimal.Zero) {
+		log.Printf("ERROR: Grid creation invalid buy amount: %s", req.BuyAmount)
 		http.Error(w, "Buy amount must be positive", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Creating grid for %s: min=%s, max=%s, step=%s, amount=%s",
+	log.Printf("INFO: Creating grid for %s: min=%s, max=%s, step=%s, amount=%s",
 		req.Symbol, req.MinPrice, req.MaxPrice, req.GridStep, req.BuyAmount)
 
 	_, err := h.gridService.CreateGrid(req.Symbol, req.MinPrice, req.MaxPrice, req.GridStep, req.BuyAmount)
@@ -230,15 +239,14 @@ func (h *Handlers) handleGetAllGrids(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) handleGetGridSymbols(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Fetching grid symbols")
-
 	symbols, err := h.gridService.GetGridSymbols()
 	if err != nil {
-		log.Printf("Error fetching grid symbols: %v", err)
+		log.Printf("ERROR: Failed to fetch grid symbols: %v", err)
 		http.Error(w, "Failed to fetch grid symbols", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("INFO: Retrieved %d grid symbols: %v", len(symbols), symbols)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string][]string{"symbols": symbols})

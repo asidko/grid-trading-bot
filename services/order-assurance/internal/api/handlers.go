@@ -47,7 +47,6 @@ func (h *Handlers) handlePlaceOrder(w http.ResponseWriter, r *http.Request) {
 	// Place order (idempotent)
 	resp, err := h.orderService.PlaceOrder(req)
 	if err != nil {
-		log.Printf("Error placing order: %v", err)
 
 		// Parse Binance error codes
 		errorMsg := err.Error()
@@ -80,8 +79,6 @@ func (h *Handlers) handlePlaceOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Order placed successfully: %s", resp.OrderID)
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
@@ -104,7 +101,6 @@ func (h *Handlers) handleGetOrderStatus(w http.ResponseWriter, r *http.Request) 
 
 	status, err := h.orderService.GetOrderStatus(symbol, orderID)
 	if err != nil {
-		log.Printf("Error getting order status: %v", err)
 		http.Error(w, "Failed to get order status", http.StatusInternalServerError)
 		return
 	}

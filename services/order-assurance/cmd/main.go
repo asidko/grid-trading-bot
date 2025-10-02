@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/grid-trading-bot/services/order-assurance/internal/api"
@@ -53,9 +52,6 @@ func main() {
 	router := mux.NewRouter()
 	handlers.RegisterRoutes(router)
 
-	// Add logging middleware
-	router.Use(loggingMiddleware)
-
 	// Create HTTP server
 	srv := &http.Server{
 		Addr:    ":" + cfg.ServerPort,
@@ -86,21 +82,4 @@ func main() {
 	}
 
 	fmt.Println("Server stopped")
-}
-
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
-		// Call the next handler
-		next.ServeHTTP(w, r)
-
-		// Log the request
-		log.Printf(
-			"%s %s %s",
-			r.Method,
-			r.RequestURI,
-			time.Since(start),
-		)
-	})
 }
