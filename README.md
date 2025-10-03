@@ -128,3 +128,44 @@ make down
 # Remove database data (⚠️ all data lost)
 rm -rf .grid-trading-data
 ```   
+
+### Other tips
+
+#### Check what levels are active right now
+
+Check levels with any status other than "ready" (to get levels where we're waiting for buy or sell at the moment):
+
+```bash
+sqlite3 -header -column .grid-trading-data/grid_trading.db "SELECT buy_price, sell_price, buy_amount, filled_amount, state, updated_at FROM grid_levels WHERE state <> 'READY';"
+```
+
+#### Check last transactions
+
+```bash
+# Select any last transactions
+sqlite3 -header -column .grid-trading-data/grid_trading.db "SELECT created_at, symbol, side, status, target_price, amount_usdt, profit_usdt FROM transactions ORDER BY created_at DESC LIMIT 10;"
+```
+
+```bash
+# Select last sell transactions
+sqlite3 -header -column .grid-trading-data/grid_trading.db "SELECT s.created_at, s.symbol, b.target_price as buy_price, s.target_price as sell_price, s.amount_usdt, s.profit_usdt FROM transactions as s JOIN transactions as b ON b.id = s.related_buy_id  WHERE s.side='SELL' and s.
+status='FILLED' ORDER BY s.created_at DESC LIMIT 10;"
+```
+
+#### I changed my mind and want to use other levels or symbol
+
+1. Delete all levels from database:
+
+```bash
+# Delete all levels from grid_levels table
+sudo sqlite3 .grid-trading-data/grid_trading.db "DELETE FROM grid_levels;"
+```
+
+2. Go to Binance Spot and cancel all active orders for the symbol (‼️ you may want to leave the last sell order to sell what you have bought).
+
+3. To create new levels:
+
+```bash
+# Run levels creation again
+make levels
+```
