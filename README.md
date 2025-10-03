@@ -6,14 +6,18 @@ Automated cryptocurrency trading bot that profits from market volatility by buyi
 
 Grid trading splits a price range into levels. The bot automatically buys when price drops to each level, then sells when price rises.
 
-**Example**: ETH grid from $3000-$4000 with $100 steps
-- Buy at $3000 → Sell at $3100 → $100 profit
-- Buy at $3100 → Sell at $3200 → $100 profit
+**Example**: ETH grid from $4000-$4500 with $100 steps
+- Buy at $4000 → Sell at $4100
+- Buy at $4100 → Sell at $4200
+- Buy at $4200 → Sell at $4300
 - And so on...
 
-Each level operates independently, generating profits from price movements in both directions.
+![Levels trading example](docs/assets/grid_orders.png "Trading by levels")
 
-👉 More: **[IDEA.md](IDEA.md)** - Strategy concept
+Each level operates independently, capturing profits as price moves up and down within the range.
+
+👉 More: **[IDEA.md](docs/IDEA.md)** - Strategy concept
+
 
 ## Setup
 
