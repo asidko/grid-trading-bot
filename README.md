@@ -61,6 +61,7 @@ Services run on localhost:
 Before creating levels, estimate your profit:
 
 ```bash
+# Just a calculator, bot won't do any actions here
 make calc
 ```
 
@@ -157,8 +158,11 @@ status='FILLED' ORDER BY s.created_at DESC LIMIT 10;"
 1. Delete all levels from database:
 
 ```bash
-# Delete all levels from grid_levels table
+# Delete all levels from grid_levels table - the bot won't be able to trade anymore
 sudo sqlite3 .grid-trading-data/grid_trading.db "DELETE FROM grid_levels;"
+
+# (optionally) Delete all transactions from transactions table to clear the trading history
+sudo sqlite3 .grid-trading-data/grid_trading.db "DELETE FROM transactions;"
 ```
 
 2. Go to Binance Spot and cancel all active orders for the symbol (‼️ you may want to leave the last sell order to sell what you have bought).
