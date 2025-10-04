@@ -519,8 +519,8 @@ func (r *GridLevelRepository) GetDistinctSymbols() ([]string, error) {
 func (r *GridLevelRepository) GetLevelCounts() (holding, ready int, err error) {
 	query := `
 		SELECT
-			COUNT(CASE WHEN state = 'HOLDING' THEN 1 END) as holding,
-			COUNT(CASE WHEN state = 'READY' THEN 1 END) as ready
+			COUNT(CASE WHEN state = 'SELL_ACTIVE' THEN 1 END) as holding,
+			COUNT(CASE WHEN state = 'BUY_ACTIVE' THEN 1 END) as ready
 		FROM grid_levels
 		WHERE enabled = 1
 	`
