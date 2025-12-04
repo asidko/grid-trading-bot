@@ -298,7 +298,7 @@ func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decima
 		WHERE id = $3 AND state = $4
 	`
 
-	result, err := tx.Exec(query, models.StateHolding, filledAmount, id, models.StateBuyActive)
+	result, err := tx.Exec(query, models.StateBought, filledAmount, id, models.StateBuyActive)
 	if err != nil {
 		log.Printf("ERROR: Failed to process buy fill for level %d: %v", id, err)
 		return err
@@ -319,7 +319,7 @@ func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decima
 		return err
 	}
 
-	log.Printf("INFO: Level %d → HOLDING, filled_amount=%s", id, filledAmount)
+	log.Printf("INFO: Level %d → BOUGHT, filled_amount=%s", id, filledAmount)
 	return nil
 }
 
@@ -412,7 +412,7 @@ func (r *GridLevelRepository) TryStartSellOrder(id int) (bool, error) {
 		WHERE id = $2 AND state = $3 AND enabled = true AND filled_amount IS NOT NULL
 	`
 
-	result, err := tx.Exec(query, models.StatePlacingSell, id, models.StateHolding)
+	result, err := tx.Exec(query, models.StatePlacingSell, id, models.StateBought)
 	if err != nil {
 		log.Printf("ERROR: Failed to try start sell order for level %d: %v", id, err)
 		return false, err

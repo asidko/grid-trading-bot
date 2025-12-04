@@ -13,7 +13,7 @@ const (
 	StateReady       GridState = "READY"
 	StatePlacingBuy  GridState = "PLACING_BUY"
 	StateBuyActive   GridState = "BUY_ACTIVE"
-	StateHolding     GridState = "HOLDING"
+	StateBought      GridState = "BOUGHT" // Previously HOLDING - have coins, sell order not yet placed
 	StatePlacingSell GridState = "PLACING_SELL"
 	StateSellActive  GridState = "SELL_ACTIVE"
 	StateError       GridState = "ERROR"
@@ -43,7 +43,7 @@ func (g *GridLevel) CanPlaceBuy(currentPrice decimal.Decimal) bool {
 }
 
 func (g *GridLevel) CanPlaceSell(currentPrice decimal.Decimal) bool {
-	return g.State == StateHolding &&
+	return g.State == StateBought &&
 		g.Enabled &&
 		g.FilledAmount.Valid &&
 		g.FilledAmount.Decimal.GreaterThan(decimal.Zero)

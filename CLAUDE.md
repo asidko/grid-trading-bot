@@ -5,12 +5,12 @@
 
 ## State Machine
 ```
-READY → PLACING_BUY → BUY_ACTIVE → HOLDING → PLACING_SELL → SELL_ACTIVE → READY
+READY → PLACING_BUY → BUY_ACTIVE → BOUGHT → PLACING_SELL → SELL_ACTIVE → READY
 ```
 
 ## Critical Logic
-- **Buy trigger:** `price > buy_price` AND `state = READY`
-- **Sell trigger:** `price < sell_price` AND `state = HOLDING` (⚠️ BUG: code uses `>=`)
+- **Buy trigger:** `price >= buy_price` AND `state = READY`
+- **Sell trigger:** `state = BOUGHT` (places LIMIT order at sell_price - executes when price reaches target)
 - Each grid level is independent buy-sell cycle with its own state
 
 ## Database Tables

@@ -224,7 +224,7 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 
 	if !level.FilledAmount.Valid {
 		log.Printf("ERROR: Level %d has no filled amount, cannot place sell order", level.ID)
-		s.repo.UpdateState(level.ID, models.StateHolding)
+		s.repo.UpdateState(level.ID, models.StateBought)
 		return fmt.Errorf("no filled amount for level %d", level.ID)
 	}
 
@@ -241,7 +241,7 @@ func (s *GridService) tryPlaceSellOrder(level *models.GridLevel) error {
 	orderResp, err := s.assurance.PlaceOrder(orderReq)
 	if err != nil {
 		log.Printf("ERROR: Sell order placement failed for level %d: %v", level.ID, err)
-		s.repo.UpdateState(level.ID, models.StateHolding)
+		s.repo.UpdateState(level.ID, models.StateBought)
 		s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "order_placement_failed", err.Error())
 		return fmt.Errorf("failed to place sell order: %w", err)
 	}
@@ -300,7 +300,7 @@ func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount, f
 		return nil
 	}
 
-	if updatedLevel.State == models.StateHolding {
+	if updatedLevel.State == models.StateBought {
 		if err := s.tryPlaceSellOrder(updatedLevel); err != nil {
 			log.Printf("ERROR: Failed to place sell order for level %d: %v", level.ID, err)
 		}
@@ -452,6 +452,7 @@ func (s *GridService) SyncOrders() error {
 				} else {
 					s.repo.UpdateState(level.ID, models.StateReady)
 					log.Printf("ERROR: Failed to recover buy order for level %d: %v", level.ID, err)
+					s.txRepo.RecordBuyError(level.ID, level.Symbol, level.BuyPrice, "recovery_failed", err.Error())
 				}
 			}
 		} else if level.State == models.StatePlacingSell {
@@ -469,12 +470,14 @@ func (s *GridService) SyncOrders() error {
 					s.repo.UpdateSellOrderPlaced(level.ID, orderResp.OrderID)
 					log.Printf("SUCCESS: Recovered sell order %s for level %d", orderResp.OrderID, level.ID)
 				} else {
-					s.repo.UpdateState(level.ID, models.StateHolding)
+					s.repo.UpdateState(level.ID, models.StateBought)
 					log.Printf("ERROR: Failed to recover sell order for level %d: %v", level.ID, err)
+					s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "recovery_failed", err.Error())
 				}
 			} else {
-				log.Printf("WARNING: Level %d stuck in PLACING_SELL but no filled amount, resetting to HOLDING", level.ID)
-				s.repo.UpdateState(level.ID, models.StateHolding)
+				log.Printf("WARNING: Level %d stuck in PLACING_SELL but no filled amount, resetting to BOUGHT", level.ID)
+				s.repo.UpdateState(level.ID, models.StateBought)
+				s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "recovery_failed", "missing filled_amount")
 			}
 		}
 	}
@@ -509,12 +512,18 @@ func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID
 	}
 
 	if status == nil {
-		targetState := models.StateHolding
+		targetState := models.StateBought
 		if isBuy {
 			targetState = models.StateReady
 		}
 		log.Printf("WARNING: Order %s not found on exchange, resetting level %d to %s", orderID, level.ID, targetState)
 		s.repo.UpdateState(level.ID, targetState)
+		// Record audit trail for order not found
+		if isBuy {
+			s.txRepo.RecordBuyError(level.ID, level.Symbol, level.BuyPrice, "order_not_found", "order disappeared from exchange")
+		} else {
+			s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "order_not_found", "order disappeared from exchange")
+		}
 		return
 	}
 
@@ -532,12 +541,18 @@ func (s *GridService) checkAndUpdateOrderStatus(level *models.GridLevel, orderID
 			s.ProcessSellFillNotification(orderID, *status.FilledAmount, *status.FillPrice)
 		}
 	case "cancelled":
-		targetState := models.StateHolding
+		targetState := models.StateBought
 		if isBuy {
 			targetState = models.StateReady
 		}
 		log.Printf("WARNING: Order %s cancelled on exchange, resetting level %d to %s", orderID, level.ID, targetState)
 		s.repo.UpdateState(level.ID, targetState)
+		// Record audit trail for cancelled order
+		if isBuy {
+			s.txRepo.RecordBuyError(level.ID, level.Symbol, level.BuyPrice, "order_cancelled", "order cancelled on exchange")
+		} else {
+			s.txRepo.RecordSellError(level.ID, level.Symbol, level.SellPrice, "order_cancelled", "order cancelled on exchange")
+		}
 	case "open":
 		side := "SELL"
 		targetPrice := level.SellPrice

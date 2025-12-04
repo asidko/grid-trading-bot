@@ -25,6 +25,11 @@ func NewOrderService(binance *exchange.BinanceClient, gridClient *client.Notifie
 
 // PlaceOrder handles idempotent order placement
 func (s *OrderService) PlaceOrder(req models.OrderRequest) (*models.OrderResponse, error) {
+	// Defensive check: prevent division by zero
+	if req.Price.IsZero() {
+		return nil, fmt.Errorf("price cannot be zero")
+	}
+
 	// Convert USDT amount to coin amount for buy orders
 	quantity := req.Amount
 	if req.Side == models.SideBuy {
@@ -102,7 +107,7 @@ func (s *OrderService) fetchOrderStatus(symbol, orderID string) (*models.OrderSt
 func (s *OrderService) sendFillNotification(order *models.BinanceOrder, filledAmount, fillPrice decimal.Decimal) {
 	notification := models.FillNotification{
 		OrderID:      strconv.FormatInt(order.OrderID, 10),
-		Symbol:       s.stripUSDT(order.Symbol),
+		Symbol:       order.Symbol, // Use full symbol (e.g., ETHUSDT) - matches database
 		Price:        fillPrice,
 		Side:         order.Side,
 		Status:       "filled",
@@ -116,12 +121,4 @@ func (s *OrderService) sendFillNotification(order *models.BinanceOrder, filledAm
 		log.Printf("INFO: Sent fill notification - Order: %d, Symbol: %s, Side: %s, Amount: %s @ %s",
 			order.OrderID, notification.Symbol, order.Side, filledAmount, fillPrice)
 	}
-}
-
-func (s *OrderService) stripUSDT(symbol string) string {
-	// Convert ETHUSDT to ETH, BTCUSDT to BTC, etc.
-	if len(symbol) > 4 && symbol[len(symbol)-4:] == "USDT" {
-		return symbol[:len(symbol)-4]
-	}
-	return symbol
 }
