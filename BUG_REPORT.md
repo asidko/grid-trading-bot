@@ -5,17 +5,17 @@
 
 ## Summary
 
-Found **6 bugs** across the grid trading bot codebase, ranging from **CRITICAL** (trading logic errors) to **MEDIUM** (missing audit trails).
+Found **6 issues** across the grid trading bot codebase, ranging from **HIGH** (incorrect metrics) to **LOW** (code smells).
 
 ---
 
-## CRITICAL Bugs
+## LOW/INFORMATIONAL Issues
 
-### BUG #1: Missing Sell Price Check in `CanPlaceSell`
+### BUG #1: Unused Price Parameter in `CanPlaceSell` (Documentation Mismatch)
 
 **File:** `services/grid-trading/internal/models/grid_level.go:45-50`
 
-**Problem:** The `CanPlaceSell` method receives a `currentPrice` parameter but **never uses it**. Sell orders are triggered when the level is in `HOLDING` state regardless of the current market price.
+**Problem:** The `CanPlaceSell` method receives a `currentPrice` parameter but **never uses it**. Per CLAUDE.md, a price check was intended.
 
 **Current Code:**
 ```go
@@ -24,28 +24,26 @@ func (g *GridLevel) CanPlaceSell(currentPrice decimal.Decimal) bool {
         g.Enabled &&
         g.FilledAmount.Valid &&
         g.FilledAmount.Decimal.GreaterThan(decimal.Zero)
-    // BUG: currentPrice is never checked!
+    // NOTE: currentPrice parameter is unused!
 }
 ```
 
 **Expected Behavior (per CLAUDE.md):** Sell trigger should be `price < sell_price AND state = HOLDING`
 
-**Expected Code:**
-```go
-func (g *GridLevel) CanPlaceSell(currentPrice decimal.Decimal) bool {
-    return g.State == StateHolding &&
-        g.Enabled &&
-        g.FilledAmount.Valid &&
-        g.FilledAmount.Decimal.GreaterThan(decimal.Zero) &&
-        currentPrice.LessThan(g.SellPrice)  // MISSING!
-}
-```
+**Important Clarification:**
+- Sell orders ARE placed as **LIMIT orders** at `level.SellPrice` (`grid_service.go:233`)
+- The order will only **execute** at the limit price (or better) - NOT at any market price
+- So there is **no risk of selling at the wrong price** due to limit order mechanics
 
-**Impact:**
-- Sell orders trigger at **ANY** price when in HOLDING state
-- Bot could sell at a loss during uptrends
-- Completely breaks the grid trading strategy
-- **Financial loss risk: HIGH**
+**Why this might still matter:**
+1. **Unused parameter** - Code smell, parameter passed but ignored
+2. **Documentation mismatch** - CLAUDE.md specifies price check should exist
+3. **Possible intended behavior** - Check might delay order placement until price approaches target to:
+   - Reduce exchange API calls
+   - Avoid order book clutter
+   - Support specific grid trading variations
+
+**Severity:** Downgraded from CRITICAL to **LOW/INFORMATIONAL** - no financial risk due to LIMIT order usage
 
 ---
 
@@ -227,19 +225,19 @@ currentPrice.GreaterThan(g.BuyPrice) &&  // Should use >
 
 | # | Severity | Bug | File | Lines | Impact |
 |---|----------|-----|------|-------|--------|
-| 1 | CRITICAL | Missing sell price check | grid_level.go | 45-50 | Sells at wrong prices |
+| 1 | LOW | Unused price parameter | grid_level.go | 45-50 | Code smell (no financial risk) |
 | 2 | HIGH | GetLevelCounts inverted | grid_level_repository.go | 519-530 | Wrong status metrics |
 | 3 | HIGH | Symbol transformation | order_service.go | 105, 121-127 | Data inconsistency |
 | 4 | MEDIUM | Division by zero risk | order_service.go | 30-34 | Potential crash |
 | 5 | MEDIUM | Missing audit trail | grid_service.go | Multiple | Lost history |
-| 6 | MEDIUM | Wrong comparison operator | grid_level.go | 41 | Early trigger |
+| 6 | LOW | Wrong comparison operator | grid_level.go | 41 | Minor doc mismatch |
 
 ---
 
 ## Recommendations
 
-1. **Immediate:** Fix BUG #1 (missing sell price check) - this is a **critical trading logic error**
-2. **High Priority:** Fix BUG #2 (GetLevelCounts) - users see incorrect metrics
-3. **High Priority:** Fix BUG #3 (stripUSDT) - remove symbol transformation
-4. **Medium Priority:** Add audit trail recording in sync job failure paths
-5. **Low Priority:** Align comparison operators with documentation
+1. **High Priority:** Fix BUG #2 (GetLevelCounts) - users see incorrect status metrics
+2. **High Priority:** Fix BUG #3 (stripUSDT) - remove symbol transformation for consistency
+3. **Medium Priority:** Fix BUG #4 - add defensive zero check in PlaceOrder
+4. **Medium Priority:** Fix BUG #5 - add audit trail recording in sync job failure paths
+5. **Low Priority:** Fix BUG #1 & #6 - align code with documentation or update docs
