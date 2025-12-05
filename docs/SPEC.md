@@ -31,7 +31,7 @@ Each grid level represents a complete buy-sell cycle with both buy and sell pric
 | `sell_price` | decimal(16,8) | Price to place sell order (e.g., 3800.00000000) |
 | `buy_amount` | decimal(16,8) | USDT amount to buy with (e.g., 1000.00000000) |
 | `filled_amount` | decimal(16,8) | Actual amount bought in coins (e.g., 0.27800000 ETH) |
-| `state` | enum | Current state: READY, PLACING_BUY, BUY_ACTIVE, HOLDING, PLACING_SELL, SELL_ACTIVE, ERROR |
+| `state` | enum | Current state: READY, PLACING_BUY, BUY_ACTIVE, BOUGHT, PLACING_SELL, SELL_ACTIVE, ERROR |
 | `buy_order_id` | string | Exchange order ID for buy order |
 | `sell_order_id` | string | Exchange order ID for sell order |
 | `enabled` | boolean | Enable/disable this level (default: true) |
@@ -85,7 +85,7 @@ Example: ETH price = $3700
   1. Set `state = PLACING_SELL`, update `state_changed_at = NOW()`
   2. Call order assurance service: `{symbol, price: sell_price, side: "sell", amount: filled_amount}`
   3. Success → Save `sell_order_id`, set `state = SELL_ACTIVE`, update `state_changed_at`
-  4. Failure → Revert to `HOLDING`, store error in `error_msg`, update `state_changed_at`
+  4. Failure → Revert to `BOUGHT`, store error in `error_msg`, update `state_changed_at`
   5. If crash occurs: On recovery, retry assurance call (idempotent) with current DB values
 
 ### Fill Processing
@@ -141,7 +141,7 @@ Response: {order_id, status: "open|filled|cancelled", filled_amount, fill_price}
 ```
 
 **Status Actions:**
-- `filled`: Update state to HOLDING (buy) or READY (sell)
+- `filled`: Update state to BOUGHT (buy) or READY (sell)
 - `cancelled` or not found: Reset state to READY
 - `open`: No action needed
 

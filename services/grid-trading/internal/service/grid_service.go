@@ -293,7 +293,7 @@ func (s *GridService) ProcessBuyFillNotification(orderID string, filledAmount, f
 	log.Printf("INFO: Processed buy fill for level %d - Order: %s, Amount: %s coins, Fill Price: %s, Total: %s USDT",
 		level.ID, orderID, filledAmount, fillPrice, amountUSDT)
 
-	// Immediately place sell order now that we're in HOLDING state
+	// Immediately place sell order now that we're in BOUGHT state
 	updatedLevel, err := s.repo.GetByID(level.ID)
 	if err != nil {
 		log.Printf("ERROR: Failed to fetch updated level %d for sell order: %v", level.ID, err)
