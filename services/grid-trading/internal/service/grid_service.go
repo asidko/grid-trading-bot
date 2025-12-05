@@ -23,7 +23,7 @@ type GridLevelRepositoryInterface interface {
 	GetStuckInPlacingState(timeout time.Duration) ([]*models.GridLevel, error)
 	GetAllActive() ([]*models.GridLevel, error)
 	GetDistinctSymbols() ([]string, error)
-	GetLevelCounts() (holding, ready int, err error)
+	GetLevelCounts() (waitingForSell, waitingForBuy int, err error)
 
 	// State management operations
 	TryStartBuyOrder(id int) (bool, error)
@@ -712,7 +712,7 @@ func (s *GridService) GetStatus() (*StatusResponse, error) {
 	}
 
 	// Get level counts
-	holding, ready, err := s.repo.GetLevelCounts()
+	waitingForSell, waitingForBuy, err := s.repo.GetLevelCounts()
 	if err != nil {
 		log.Printf("ERROR: GetStatus - GetLevelCounts failed: %v", err)
 		return nil, fmt.Errorf("failed to get level counts: %w", err)
@@ -740,8 +740,8 @@ func (s *GridService) GetStatus() (*StatusResponse, error) {
 		ProfitThisMonth: profitMonth,
 		ProfitAllTime:   profitAllTime,
 		LastPriceUpdate: lastPriceUpdate,
-		WaitingForBuy:   ready,
-		WaitingForSell:  holding,
+		WaitingForBuy:   waitingForBuy,
+		WaitingForSell:  waitingForSell,
 		ErrorsToday:     errors,
 	}
 
