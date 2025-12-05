@@ -56,10 +56,11 @@ READY → PLACING_BUY → BUY_ACTIVE → BOUGHT → PLACING_SELL → SELL_ACTIVE
 When price update received for a symbol:
 ```python
 for level in get_levels(symbol):
-    if price > level.buy_price and level.state == 'READY' and level.enabled:
+    if price >= level.buy_price and price < level.sell_price and level.state == 'READY' and level.enabled:
         # Trigger buy order at level.buy_price
-    elif price < level.sell_price and level.state == 'BOUGHT' and level.enabled:
+    elif level.state == 'BOUGHT' and level.enabled:
         # Trigger sell order at level.sell_price for level.filled_amount
+        # Note: No price check needed - LIMIT order handles price targeting
 ```
 
 Example: ETH price = $3700
@@ -71,7 +72,7 @@ Example: ETH price = $3700
 ### Order Placement Flow
 
 **Buy Order:**
-- Condition: `state = READY` AND `enabled = true` AND `price > buy_price`
+- Condition: `state = READY` AND `enabled = true` AND `price >= buy_price` AND `price < sell_price`
 - Process:
   1. Set `state = PLACING_BUY`, update `state_changed_at = NOW()`
   2. Call order assurance service: `{symbol, price: buy_price, side: "buy", amount: buy_amount}`
@@ -80,7 +81,8 @@ Example: ETH price = $3700
   5. If crash occurs: On recovery, retry assurance call (idempotent) with current DB values
 
 **Sell Order:**
-- Condition: `state = BOUGHT` AND `enabled = true` AND `price < sell_price`
+- Condition: `state = BOUGHT` AND `enabled = true` AND `filled_amount > 0`
+- Note: No price check - sell order placed immediately after buy fills. LIMIT order at sell_price handles price targeting.
 - Process:
   1. Set `state = PLACING_SELL`, update `state_changed_at = NOW()`
   2. Call order assurance service: `{symbol, price: sell_price, side: "sell", amount: filled_amount}`
@@ -102,7 +104,7 @@ Process:
 2. Check if already processed: if `state != BUY_ACTIVE`, skip (idempotent)
 3. Update `state = BOUGHT`
 4. Store `filled_amount` (actual coins bought)
-5. Clear `buy_order_id`
+5. Keep `buy_order_id` for troubleshooting (not cleared)
 
 **Sell Fill Notification:**
 ```
