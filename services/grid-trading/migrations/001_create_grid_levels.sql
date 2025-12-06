@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS grid_levels (
     -- Constraints
     CONSTRAINT unique_level UNIQUE (symbol, buy_price, sell_price),
     CONSTRAINT check_prices CHECK (CAST(sell_price AS REAL) > CAST(buy_price AS REAL)),
-    CONSTRAINT check_state CHECK (state IN ('READY', 'PLACING_BUY', 'BUY_ACTIVE', 'HOLDING', 'PLACING_SELL', 'SELL_ACTIVE', 'ERROR'))
+    CONSTRAINT check_state CHECK (state IN ('READY', 'PLACING_BUY', 'BUY_ACTIVE', 'BOUGHT', 'PLACING_SELL', 'SELL_ACTIVE', 'ERROR'))
 );
 
 -- Create indexes for performance
