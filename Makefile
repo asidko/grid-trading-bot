@@ -111,5 +111,14 @@ status:
 	} || true; \
 	echo $$data | jq -e '.last_price_update' > /dev/null 2>&1 && [ "$$(echo $$data | jq -r '.last_price_update')" != "null" ] && { \
 		echo "\n📍 Price: $$(echo $$data | jq -r '.last_price_update.symbol') @ $$(echo $$data | jq -r '.last_price_update.price') | $$(echo $$data | jq -r '.last_price_update.updated_at')"; \
-	} || true; \
-	echo "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+	} || true
+	@if [ -f .grid-trading-data/grid_trading.db ]; then \
+		error_count=$$(sqlite3 .grid-trading-data/grid_trading.db "SELECT COUNT(*) FROM grid_levels WHERE state='ERROR'" 2>/dev/null || echo "0"); \
+		if [ "$$error_count" -gt 0 ]; then \
+			echo "\n⚠️  Error Levels ($$error_count):"; \
+			sqlite3 -header -column .grid-trading-data/grid_trading.db \
+				"SELECT g.id, g.symbol, g.buy_price, g.sell_price, t.error_code, SUBSTR(t.error_msg, 1, 40) as error_msg FROM grid_levels g LEFT JOIN (SELECT grid_level_id, error_code, error_msg FROM transactions WHERE status='ERROR' ORDER BY created_at DESC) t ON g.id = t.grid_level_id WHERE g.state='ERROR' GROUP BY g.id ORDER BY g.state_changed_at DESC" 2>/dev/null | \
+				sed 's/^/   /'; \
+		fi; \
+	fi
+	@echo "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
