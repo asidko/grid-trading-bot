@@ -42,7 +42,10 @@ func (g *GridLevel) CanPlaceBuy(currentPrice decimal.Decimal) bool {
 		currentPrice.LessThan(g.SellPrice)
 }
 
-func (g *GridLevel) CanPlaceSell(currentPrice decimal.Decimal) bool {
+// CanPlaceSell checks if a sell order can be placed for this level.
+// Sell orders are placed immediately after a buy fill (limit order at SellPrice),
+// so no price check is needed - we just verify we have coins to sell.
+func (g *GridLevel) CanPlaceSell() bool {
 	return g.State == StateHolding &&
 		g.Enabled &&
 		g.FilledAmount.Valid &&

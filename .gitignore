@@ -12,6 +12,12 @@ bin/
 *.so
 *.dylib
 
+# Go build output (when built without -o flag)
+main
+grid-trading
+order-assurance
+price-monitor
+
 # Test binary
 *.test
 

@@ -516,16 +516,19 @@ func (r *GridLevelRepository) GetDistinctSymbols() ([]string, error) {
 	return symbols, rows.Err()
 }
 
-func (r *GridLevelRepository) GetLevelCounts() (holding, ready int, err error) {
+// GetLevelCounts returns counts of active orders:
+// - waitingForSellFill: levels in SELL_ACTIVE state (sell order placed, waiting for fill)
+// - waitingForBuyFill: levels in BUY_ACTIVE state (buy order placed, waiting for fill)
+func (r *GridLevelRepository) GetLevelCounts() (waitingForSellFill, waitingForBuyFill int, err error) {
 	query := `
 		SELECT
-			COUNT(CASE WHEN state = 'SELL_ACTIVE' THEN 1 END) as holding,
-			COUNT(CASE WHEN state = 'BUY_ACTIVE' THEN 1 END) as ready
+			COUNT(CASE WHEN state = 'SELL_ACTIVE' THEN 1 END) as sell_active,
+			COUNT(CASE WHEN state = 'BUY_ACTIVE' THEN 1 END) as buy_active
 		FROM grid_levels
 		WHERE enabled = 1
 	`
 
-	err = r.db.QueryRow(query).Scan(&holding, &ready)
-	return holding, ready, err
+	err = r.db.QueryRow(query).Scan(&waitingForSellFill, &waitingForBuyFill)
+	return waitingForSellFill, waitingForBuyFill, err
 }
 

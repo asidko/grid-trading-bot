@@ -145,8 +145,8 @@ func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) 
 			} else {
 				activatedCount++
 			}
-		} else if level.CanPlaceSell(price) {
-			log.Printf("INFO: Price %s triggered SELL level %d (target: %s)", price, level.ID, level.SellPrice)
+		} else if level.CanPlaceSell() {
+			log.Printf("INFO: Placing SELL for level %d (target: %s)", level.ID, level.SellPrice)
 			if err := s.tryPlaceSellOrder(level); err != nil {
 				log.Printf("ERROR: Failed to place sell order for level %d: %v", level.ID, err)
 			} else {
@@ -696,8 +696,8 @@ func (s *GridService) GetStatus() (*StatusResponse, error) {
 		return nil, fmt.Errorf("failed to get last sell: %w", err)
 	}
 
-	// Get level counts
-	holding, ready, err := s.repo.GetLevelCounts()
+	// Get level counts (active orders waiting for fills)
+	waitingForSellFill, waitingForBuyFill, err := s.repo.GetLevelCounts()
 	if err != nil {
 		log.Printf("ERROR: GetStatus - GetLevelCounts failed: %v", err)
 		return nil, fmt.Errorf("failed to get level counts: %w", err)
@@ -725,8 +725,8 @@ func (s *GridService) GetStatus() (*StatusResponse, error) {
 		ProfitThisMonth: profitMonth,
 		ProfitAllTime:   profitAllTime,
 		LastPriceUpdate: lastPriceUpdate,
-		WaitingForBuy:   ready,
-		WaitingForSell:  holding,
+		WaitingForBuy:   waitingForBuyFill,
+		WaitingForSell:  waitingForSellFill,
 		ErrorsToday:     errors,
 	}
 

@@ -144,7 +144,7 @@ func (pm *PriceMonitor) handlePriceUpdate(symbol string, price decimal.Decimal) 
 	defer pm.mu.Unlock()
 
 	// Check if price changed significantly
-	if lastPrice, ok := pm.lastPrice[symbol]; ok {
+	if lastPrice, ok := pm.lastPrice[symbol]; ok && lastPrice.GreaterThan(decimal.Zero) {
 		change := price.Sub(lastPrice).Abs().Div(lastPrice).Mul(decimal.NewFromInt(100))
 		if change.LessThan(decimal.NewFromFloat(pm.cfg.MinPriceChangePct)) {
 			return // Skip - insignificant change

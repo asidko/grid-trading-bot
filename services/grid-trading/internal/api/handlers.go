@@ -73,6 +73,18 @@ func (h *Handlers) handlePriceTrigger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate required fields
+	if req.Symbol == "" {
+		log.Printf("ERROR: Price trigger missing symbol")
+		http.Error(w, "Symbol is required", http.StatusBadRequest)
+		return
+	}
+	if req.Price.LessThanOrEqual(decimal.Zero) {
+		log.Printf("ERROR: Price trigger invalid price: %s", req.Price)
+		http.Error(w, "Price must be positive", http.StatusBadRequest)
+		return
+	}
+
 	log.Printf("INFO: Price trigger received - Symbol: %s, Price: %s", req.Symbol, req.Price)
 
 	if err := h.gridService.ProcessPriceTrigger(req.Symbol, req.Price); err != nil {
