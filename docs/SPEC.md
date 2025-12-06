@@ -153,18 +153,8 @@ POST /trigger-for-price
 Body: {symbol: "ETHUSDT", price: 3753}
 ```
 
-**Fill Notification:**
-```
-POST /order-fill-notification
-Body: {order_id, symbol, price, side, status: "filled", filled_amount, fill_price}
-```
-
-**Error Notification:**
-```
-POST /order-fill-error-notification
-Body: {order_id, symbol, side, error: "insufficient_funds"}
-```
-Finds level by order_id, sets state to ERROR and stores error message in `error_msg` column.
+**Note:** Fill detection uses polling, not push notifications. On every price trigger,
+the system checks order status for all active orders and processes fills immediately.
 
 ### System Methods
 
@@ -183,10 +173,10 @@ init-grid-levels(symbol, min_price, max_price, grid_step, buy_amount)
 // Orders are placed only when price triggers arrive
 ```
 
-**Sync Orders (Recovery & Backup Mechanism):**
+**Sync Orders (Recovery Mechanism):**
 ```
 sync-all-orders()  // Runs hourly via scheduler
-// Primary purpose: Recovery mechanism for missed notifications & crashes
+// Purpose: Recovery mechanism for crashes and stuck orders
 // - Checks all order_ids via /order-status
 // - Processes any fills that occurred while bot was down
 // - Timeout detection using state_changed_at field:
@@ -194,8 +184,7 @@ sync-all-orders()  // Runs hourly via scheduler
 //   - *_ACTIVE > 30 days: Check if auto-cancelled by exchange
 // - For PLACING_* states without order_id: Retry assurance call (idempotent)
 // - For *_ACTIVE states: Check if filled/cancelled and update accordingly
-// Note: This is a backup mechanism. Normal operation relies on immediate
-// fill notifications via /order-fill-notification endpoint
+// Note: Primary fill detection happens on every price trigger via checkAndUpdateOrderStatus()
 ```
 
 ## Operational Behavior

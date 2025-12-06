@@ -13,7 +13,6 @@ import (
 	"github.com/grid-trading-bot/services/order-assurance/internal/config"
 	"github.com/grid-trading-bot/services/order-assurance/internal/exchange"
 	"github.com/grid-trading-bot/services/order-assurance/internal/service"
-	"github.com/grid-trading-bot/services/order-assurance/internal/client"
 	"github.com/joho/godotenv"
 )
 
@@ -39,11 +38,8 @@ func main() {
 		cfg.BinanceSecret,
 	)
 
-	// Create grid-trading client notifier
-	gridClient := client.NewNotifier(cfg.GridTradingURL)
-
 	// Create order service
-	orderService := service.NewOrderService(binanceClient, gridClient)
+	orderService := service.NewOrderService(binanceClient)
 
 	// Create API handlers
 	handlers := api.NewHandlers(orderService)
