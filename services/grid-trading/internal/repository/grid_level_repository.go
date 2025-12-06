@@ -298,7 +298,7 @@ func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decima
 		WHERE id = $3 AND state = $4
 	`
 
-	result, err := tx.Exec(query, models.StateHolding, filledAmount, id, models.StateBuyActive)
+	result, err := tx.Exec(query, models.StateBought, filledAmount, id, models.StateBuyActive)
 	if err != nil {
 		log.Printf("ERROR: Failed to process buy fill for level %d: %v", id, err)
 		return err
@@ -319,7 +319,7 @@ func (r *GridLevelRepository) ProcessBuyFill(id int, filledAmount decimal.Decima
 		return err
 	}
 
-	log.Printf("INFO: Level %d → HOLDING, filled_amount=%s", id, filledAmount)
+	log.Printf("INFO: Level %d → BOUGHT, filled_amount=%s", id, filledAmount)
 	return nil
 }
 
@@ -412,7 +412,7 @@ func (r *GridLevelRepository) TryStartSellOrder(id int) (bool, error) {
 		WHERE id = $2 AND state = $3 AND enabled = true AND filled_amount IS NOT NULL
 	`
 
-	result, err := tx.Exec(query, models.StatePlacingSell, id, models.StateHolding)
+	result, err := tx.Exec(query, models.StatePlacingSell, id, models.StateBought)
 	if err != nil {
 		log.Printf("ERROR: Failed to try start sell order for level %d: %v", id, err)
 		return false, err
@@ -516,19 +516,19 @@ func (r *GridLevelRepository) GetDistinctSymbols() ([]string, error) {
 	return symbols, rows.Err()
 }
 
-// GetLevelCounts returns counts of active orders:
-// - waitingForSellFill: levels in SELL_ACTIVE state (sell order placed, waiting for fill)
-// - waitingForBuyFill: levels in BUY_ACTIVE state (buy order placed, waiting for fill)
-func (r *GridLevelRepository) GetLevelCounts() (waitingForSellFill, waitingForBuyFill int, err error) {
+// GetLevelCounts returns counts of levels ready to trade:
+// - waitingForSell: levels in BOUGHT state (have coins, waiting to place sell order)
+// - waitingForBuy: levels in READY state (waiting for price trigger to place buy order)
+func (r *GridLevelRepository) GetLevelCounts() (waitingForSell, waitingForBuy int, err error) {
 	query := `
 		SELECT
-			COUNT(CASE WHEN state = 'SELL_ACTIVE' THEN 1 END) as sell_active,
-			COUNT(CASE WHEN state = 'BUY_ACTIVE' THEN 1 END) as buy_active
+			COUNT(CASE WHEN state = 'BOUGHT' THEN 1 END) as waiting_for_sell,
+			COUNT(CASE WHEN state = 'READY' THEN 1 END) as waiting_for_buy
 		FROM grid_levels
 		WHERE enabled = 1
 	`
 
-	err = r.db.QueryRow(query).Scan(&waitingForSellFill, &waitingForBuyFill)
-	return waitingForSellFill, waitingForBuyFill, err
+	err = r.db.QueryRow(query).Scan(&waitingForSell, &waitingForBuy)
+	return waitingForSell, waitingForBuy, err
 }
 

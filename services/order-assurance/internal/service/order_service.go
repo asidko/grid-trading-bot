@@ -22,6 +22,11 @@ func NewOrderService(binance *exchange.BinanceClient) *OrderService {
 
 // PlaceOrder handles idempotent order placement
 func (s *OrderService) PlaceOrder(req models.OrderRequest) (*models.OrderResponse, error) {
+	// Defensive check: prevent division by zero
+	if req.Price.IsZero() {
+		return nil, fmt.Errorf("price cannot be zero")
+	}
+
 	// Convert USDT amount to coin amount for buy orders
 	quantity := req.Amount
 	if req.Side == models.SideBuy {

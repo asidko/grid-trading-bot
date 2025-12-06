@@ -5,12 +5,12 @@
 
 ## State Machine
 ```
-READY → PLACING_BUY → BUY_ACTIVE → HOLDING → PLACING_SELL → SELL_ACTIVE → READY
+READY → PLACING_BUY → BUY_ACTIVE → BOUGHT → PLACING_SELL → SELL_ACTIVE → READY
 ```
 
 ## Critical Logic
 - **Buy trigger:** `price >= buy_price` AND `price < sell_price` AND `state = READY`
-- **Sell order:** Placed immediately when `state = HOLDING` (limit order at sell_price, no price check needed)
+- **Sell order:** Placed immediately when `state = BOUGHT` (limit order at sell_price, no price check needed)
 - Each grid level is independent buy-sell cycle with its own state
 
 ## Database Tables

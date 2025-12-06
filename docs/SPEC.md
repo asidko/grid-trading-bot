@@ -31,7 +31,7 @@ Each grid level represents a complete buy-sell cycle with both buy and sell pric
 | `sell_price` | decimal(16,8) | Price to place sell order (e.g., 3800.00000000) |
 | `buy_amount` | decimal(16,8) | USDT amount to buy with (e.g., 1000.00000000) |
 | `filled_amount` | decimal(16,8) | Actual amount bought in coins (e.g., 0.27800000 ETH) |
-| `state` | enum | Current state: READY, PLACING_BUY, BUY_ACTIVE, HOLDING, PLACING_SELL, SELL_ACTIVE, ERROR |
+| `state` | enum | Current state: READY, PLACING_BUY, BUY_ACTIVE, BOUGHT, PLACING_SELL, SELL_ACTIVE, ERROR |
 | `buy_order_id` | string | Exchange order ID for buy order |
 | `sell_order_id` | string | Exchange order ID for sell order |
 | `enabled` | boolean | Enable/disable this level (default: true) |
@@ -42,7 +42,7 @@ Each grid level represents a complete buy-sell cycle with both buy and sell pric
 
 **State Machine:**
 ```
-READY → PLACING_BUY → BUY_ACTIVE → HOLDING → PLACING_SELL → SELL_ACTIVE → READY
+READY → PLACING_BUY → BUY_ACTIVE → BOUGHT → PLACING_SELL → SELL_ACTIVE → READY
   ↓          ↓            ↓           ↓            ↓              ↓
  ERROR ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ←
 ```
@@ -56,22 +56,23 @@ READY → PLACING_BUY → BUY_ACTIVE → HOLDING → PLACING_SELL → SELL_ACTIV
 When price update received for a symbol:
 ```python
 for level in get_levels(symbol):
-    if price > level.buy_price and level.state == 'READY' and level.enabled:
+    if price >= level.buy_price and price < level.sell_price and level.state == 'READY' and level.enabled:
         # Trigger buy order at level.buy_price
-    elif price < level.sell_price and level.state == 'HOLDING' and level.enabled:
+    elif level.state == 'BOUGHT' and level.enabled:
         # Trigger sell order at level.sell_price for level.filled_amount
+        # Note: No price check needed - LIMIT order handles price targeting
 ```
 
 Example: ETH price = $3700
 - Checks all levels for the symbol
 - May place buy at 3600 (if state=READY)
-- May place sell at 3800 (if state=HOLDING with coins)
+- May place sell at 3800 (if state=BOUGHT with coins)
 - May trigger multiple independent levels simultaneously
 
 ### Order Placement Flow
 
 **Buy Order:**
-- Condition: `state = READY` AND `enabled = true` AND `price > buy_price`
+- Condition: `state = READY` AND `enabled = true` AND `price >= buy_price` AND `price < sell_price`
 - Process:
   1. Set `state = PLACING_BUY`, update `state_changed_at = NOW()`
   2. Call order assurance service: `{symbol, price: buy_price, side: "buy", amount: buy_amount}`
@@ -80,12 +81,13 @@ Example: ETH price = $3700
   5. If crash occurs: On recovery, retry assurance call (idempotent) with current DB values
 
 **Sell Order:**
-- Condition: `state = HOLDING` AND `enabled = true` AND `price < sell_price`
+- Condition: `state = BOUGHT` AND `enabled = true` AND `filled_amount > 0`
+- Note: No price check - sell order placed immediately after buy fills. LIMIT order at sell_price handles price targeting.
 - Process:
   1. Set `state = PLACING_SELL`, update `state_changed_at = NOW()`
   2. Call order assurance service: `{symbol, price: sell_price, side: "sell", amount: filled_amount}`
   3. Success → Save `sell_order_id`, set `state = SELL_ACTIVE`, update `state_changed_at`
-  4. Failure → Revert to `HOLDING`, store error in `error_msg`, update `state_changed_at`
+  4. Failure → Revert to `BOUGHT`, store error in `error_msg`, update `state_changed_at`
   5. If crash occurs: On recovery, retry assurance call (idempotent) with current DB values
 
 ### Fill Processing
@@ -100,9 +102,9 @@ POST /order-fill-notification
 Process:
 1. Find level by `buy_order_id = order_id`
 2. Check if already processed: if `state != BUY_ACTIVE`, skip (idempotent)
-3. Update `state = HOLDING`
+3. Update `state = BOUGHT`
 4. Store `filled_amount` (actual coins bought)
-5. Clear `buy_order_id`
+5. Keep `buy_order_id` for troubleshooting (not cleared)
 
 **Sell Fill Notification:**
 ```
@@ -141,7 +143,7 @@ Response: {order_id, status: "open|filled|cancelled", filled_amount, fill_price}
 ```
 
 **Status Actions:**
-- `filled`: Update state to HOLDING (buy) or READY (sell)
+- `filled`: Update state to BOUGHT (buy) or READY (sell)
 - `cancelled` or not found: Reset state to READY
 - `open`: No action needed
 
@@ -194,7 +196,7 @@ sync-all-orders()  // Runs hourly via scheduler
 - PLACING_* states prevent duplicate orders (checked before placing)
 - All state changes within transactions (except external API calls)
 - Duplicate price triggers safe: each level operates independently
-- Each level follows sequential state machine: READY → BUY → HOLD → SELL → READY
+- Each level follows sequential state machine: READY → BUY → BOUGHT → SELL → READY
 - No in-memory cache: always read current state from database
 - Idempotent fill notifications: checked via current state before processing
 - Grid modifications allowed anytime: affect only future orders, not active ones
@@ -234,7 +236,7 @@ sync-all-orders()  // Runs hourly via scheduler
 1. Grid level: buy_price=3400, sell_price=3600, buy_amount=1000
 2. Price drops to 3500: Triggers buy order at 3400
 3. Buy fills: 0.294 ETH bought
-   - state → HOLDING
+   - state → BOUGHT
    - filled_amount = 0.294 ETH
 4. Price rises to 3700: Triggers sell order at 3600 for 0.294 ETH
 5. Sell fills: 0.294 ETH sold
@@ -245,9 +247,9 @@ sync-all-orders()  // Runs hourly via scheduler
 
 ### Multiple Levels Operating
 ```
-Level A: buy_price=3200, sell_price=3400, state=HOLDING (0.312 ETH)
+Level A: buy_price=3200, sell_price=3400, state=BOUGHT (0.312 ETH)
 Level B: buy_price=3400, sell_price=3600, state=READY
-Level C: buy_price=3600, sell_price=3800, state=HOLDING (0.277 ETH)
+Level C: buy_price=3600, sell_price=3800, state=BOUGHT (0.277 ETH)
 
 Price = 3500:
 - Level A: Can trigger sell at 3400 (has coins)

@@ -13,7 +13,7 @@ const (
 	StateReady       GridState = "READY"
 	StatePlacingBuy  GridState = "PLACING_BUY"
 	StateBuyActive   GridState = "BUY_ACTIVE"
-	StateHolding     GridState = "HOLDING"
+	StateBought      GridState = "BOUGHT" // Previously HOLDING - have coins, sell order not yet placed
 	StatePlacingSell GridState = "PLACING_SELL"
 	StateSellActive  GridState = "SELL_ACTIVE"
 	StateError       GridState = "ERROR"
@@ -46,7 +46,7 @@ func (g *GridLevel) CanPlaceBuy(currentPrice decimal.Decimal) bool {
 // Sell orders are placed immediately after a buy fill (limit order at SellPrice),
 // so no price check is needed - we just verify we have coins to sell.
 func (g *GridLevel) CanPlaceSell() bool {
-	return g.State == StateHolding &&
+	return g.State == StateBought &&
 		g.Enabled &&
 		g.FilledAmount.Valid &&
 		g.FilledAmount.Decimal.GreaterThan(decimal.Zero)
