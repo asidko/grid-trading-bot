@@ -145,8 +145,8 @@ func (s *GridService) ProcessPriceTrigger(symbol string, price decimal.Decimal) 
 			} else {
 				activatedCount++
 			}
-		} else if level.CanPlaceSell(price) {
-			log.Printf("INFO: Price %s triggered SELL level %d (target: %s)", price, level.ID, level.SellPrice)
+		} else if level.CanPlaceSell() {
+			log.Printf("INFO: Placing SELL for level %d (target: %s)", level.ID, level.SellPrice)
 			if err := s.tryPlaceSellOrder(level); err != nil {
 				log.Printf("ERROR: Failed to place sell order for level %d: %v", level.ID, err)
 			} else {

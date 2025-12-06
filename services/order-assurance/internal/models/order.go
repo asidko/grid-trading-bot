@@ -33,7 +33,7 @@ type OrderStatus struct {
 	FillPrice    *decimal.Decimal `json:"fill_price,omitempty"`
 }
 
-// Binance order structure
+// BinanceOrder represents the order structure from Binance API
 type BinanceOrder struct {
 	Symbol              string `json:"symbol"`
 	OrderID             int64  `json:"orderId"`
@@ -50,23 +50,4 @@ type BinanceOrder struct {
 	Time                int64  `json:"time"`
 	UpdateTime          int64  `json:"updateTime"`
 	IsWorking           bool   `json:"isWorking"`
-}
-
-// FillNotification to send to grid-trading service
-type FillNotification struct {
-	OrderID      string          `json:"order_id"`
-	Symbol       string          `json:"symbol"`
-	Price        decimal.Decimal `json:"price"`
-	Side         string          `json:"side"`
-	Status       string          `json:"status"`
-	FilledAmount decimal.Decimal `json:"filled_amount"`
-	FillPrice    decimal.Decimal `json:"fill_price"`
-}
-
-// ErrorNotification to send to grid-trading service
-type ErrorNotification struct {
-	OrderID string `json:"order_id"`
-	Symbol  string `json:"symbol"`
-	Side    string `json:"side"`
-	Error   string `json:"error"`
 }

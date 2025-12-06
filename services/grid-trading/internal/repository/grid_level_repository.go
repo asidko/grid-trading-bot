@@ -516,6 +516,9 @@ func (r *GridLevelRepository) GetDistinctSymbols() ([]string, error) {
 	return symbols, rows.Err()
 }
 
+// GetLevelCounts returns counts of levels ready to trade:
+// - waitingForSell: levels in BOUGHT state (have coins, waiting to place sell order)
+// - waitingForBuy: levels in READY state (waiting for price trigger to place buy order)
 func (r *GridLevelRepository) GetLevelCounts() (waitingForSell, waitingForBuy int, err error) {
 	query := `
 		SELECT

@@ -5,10 +5,9 @@ import (
 )
 
 type Config struct {
-	ServerPort     string
-	BinanceAPIKey  string
-	BinanceSecret  string
-	GridTradingURL string
+	ServerPort    string
+	BinanceAPIKey string
+	BinanceSecret string
 }
 
 func LoadConfig() *Config {
@@ -20,15 +19,9 @@ func LoadConfig() *Config {
 	apiKey := os.Getenv("BINANCE_API_KEY")
 	apiSecret := os.Getenv("BINANCE_API_SECRET")
 
-	gridTradingURL := os.Getenv("GRID_TRADING_URL")
-	if gridTradingURL == "" {
-		gridTradingURL = "http://localhost:8080" // Only default kept for local dev
-	}
-
 	return &Config{
-		ServerPort:     serverPort,
-		BinanceAPIKey:  apiKey,
-		BinanceSecret:  apiSecret,
-		GridTradingURL: gridTradingURL,
+		ServerPort:    serverPort,
+		BinanceAPIKey: apiKey,
+		BinanceSecret: apiSecret,
 	}
 }

@@ -9,8 +9,8 @@ READY → PLACING_BUY → BUY_ACTIVE → BOUGHT → PLACING_SELL → SELL_ACTIVE
 ```
 
 ## Critical Logic
-- **Buy trigger:** `price >= buy_price` AND `state = READY`
-- **Sell trigger:** `state = BOUGHT` (places LIMIT order at sell_price - executes when price reaches target)
+- **Buy trigger:** `price >= buy_price` AND `price < sell_price` AND `state = READY`
+- **Sell order:** Placed immediately when `state = BOUGHT` (limit order at sell_price, no price check needed)
 - Each grid level is independent buy-sell cycle with its own state
 
 ## Database Tables
@@ -24,10 +24,10 @@ READY → PLACING_BUY → BUY_ACTIVE → BOUGHT → PLACING_SELL → SELL_ACTIVE
 - `services/order-assurance/internal/exchange/binance_client.go` - Binance integration
 
 ## Data Flow
-1. price-monitor polls Binance → sends trigger to grid-trading
-2. grid-trading checks levels → calls order-assurance → updates state
-3. order-assurance places order on Binance → sends fill notification back
-4. grid-trading processes fill → updates state + records transaction
+1. price-monitor polls Binance → sends price trigger to grid-trading
+2. grid-trading checks levels, places orders via order-assurance, polls order status
+3. order-assurance places orders on Binance, returns status when queried
+4. grid-trading processes fills (via polling) → updates state + records transaction
 
 ## Design Principles
 - **Reactive**: Orders placed only on price triggers (not proactive)
